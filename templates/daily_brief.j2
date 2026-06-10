@@ -1,0 +1,23 @@
+{# templates/daily_brief.j2 — Brief quotidien FULCRUM (Jinja2) #}
+{# Rendu en texte brut ou Markdown selon le contexte d'appel #}
+================================================================================
+  FULCRUM DAILY INTELLIGENCE BRIEF
+  {{ generated_at | truncate(16, True, '') }} UTC  |  Période : {{ period }}
+================================================================================
+
+NIVEAU DE MENACE : {{ threat_level }}
+
+{{ headline }}
+
+{% for section in sections %}
+────────────────────────────────────────
+  {{ section.title }}
+────────────────────────────────────────
+{% for item in section.items %}
+  • {{ item }}
+{% endfor %}
+
+{% endfor %}
+================================================================================
+  Généré par FULCRUM Intelligence Platform — Confidentiel
+================================================================================

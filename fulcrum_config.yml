@@ -1,0 +1,894 @@
+# =============================================================================
+# FULCRUM CONFIGURATION — Full Spectrum Intelligence Platform
+# =============================================================================
+# Ce fichier fusionne toutes les sources des trois outils :
+#   - Wonitor (Cyber sécurité, CVEs, Exploits)
+#   - StratWatch (Défense, Nucléaire, Aérospatiale, Géopolitique)
+#   - LeakHunter (Data Leaks, Breaches, Ransomware)
+# =============================================================================
+
+app:
+  name: "FULCRUM Intelligence Platform"
+  version: "3.0"
+  description: "Full Spectrum Intelligence Fusion Center — Cyber · Strategic · Offensive"
+  theme: "ops"
+  timezone: "UTC"
+  debug: false
+  user_agent: "FULCRUM/3.0 (Intelligence Platform; +https://github.com/fulcrum)"
+
+collection:
+  max_items_per_feed: 25
+  request_timeout: 15
+  retry_attempts: 3
+  retry_backoff: 1.5
+  concurrent_workers: 10
+  rate_limit_per_host: 2
+  user_agent_rotation: true
+  proxy_rotation: false
+  deduplicate: true
+  scraping_enabled: true
+  leak_focused_mode: false
+
+cache:
+  enabled: true
+  type: "memory"  # memory | redis
+  redis_url: "redis://localhost:6379/0"
+  ttl_seconds: 3600
+  memory_max_items: 1000
+
+intelligence:
+  scoring:
+    risk_weights:
+      critical: 40
+      exploit: 15
+      kev: 15
+      ransomware: 12
+      apt: 10
+      darkweb: 8
+    strat_weights:
+      nuclear: 25
+      conflict: 15
+      weapons: 10
+      aerospace: 8
+      sanctions: 7
+      intel: 10
+
+    # Pondération par fiabilité historique de source (0.0 - 1.0)
+    source_reliability:
+      "CISA KEV Catalog": 1.0
+      "NVD National Vuln DB": 1.0
+      "ANSSI – Alertes": 1.0
+      "CERT-FR – Bulletins": 1.0
+      "Krebs on Security": 0.95
+      "Cisco Talos": 0.95
+      "CrowdStrike Blog": 0.90
+      "Mandiant": 0.95
+      "Unit42": 0.90
+      "Securelist": 0.88
+      "RAND Corporation": 0.90
+      "ISW — War Updates": 0.85
+      "Bellingcat OSINT": 0.85
+      "HaveIBeenPwned": 1.0
+      "ThreatFox IOCs": 0.88
+      "MalwareBazaar": 0.88
+      "Exploit-DB": 0.85
+      "Project Zero": 0.95
+      "AIEA — Actualités": 0.95
+      "_default": 0.70
+
+    # Scoring temporel (fraîcheur)
+    freshness_bonus_24h: 10    # bonus si article < 24h
+    freshness_bonus_72h: 5     # bonus si article < 72h
+    freshness_malus_7d: -5     # malus si article > 7j
+
+  thresholds:
+    critical_score: 85
+    high_score: 70
+    medium_score: 50
+    flash_threshold: 90
+    # Anti-inflation CRITICAL : exige exploit OU acteur étatique confirmé
+    critical_requires_exploit_or_actor: true
+
+  # Blacklist anti-faux-positifs contextuels
+  false_positive_blacklist:
+    - "nuclear family"
+    - "atomic clock"
+    - "nuclear power plant safety"
+    - "nuclear medicine"
+    - "bomb squad training"
+    - "critical thinking"
+    - "critical care"
+    - "critical hit"
+    - "nuclear pasta"
+    - "missile defense spending"
+    - "weapons of mass destruction museum"
+    - "strategic planning"
+    - "crisis management course"
+    - "nuclear reactor safety"
+    - "defense budget"
+    - "ballistic performance"
+    - "explosive growth"
+    - "nuclear option"
+    - "cyber monday"
+    - "zero-day sale"
+
+export:
+  default_format: "html"
+  paths:
+    json: "fulcrum_export.json"
+    csv: "fulcrum_export.csv"
+    html: "fulcrum_dashboard.html"
+    pdf: "fulcrum_report.pdf"
+  auto_generate: true
+
+alerts:
+  webhooks: []
+  telegram_bot_token: null
+  telegram_chat_id: null
+  slack_webhook: null
+  discord_webhook: null
+  critical_only: false
+
+api:
+  enabled: false
+  host: "0.0.0.0"
+  port: 5000
+  cors: true
+  api_key: null
+
+# =============================================================================
+# NOUVELLES SECTIONS — v3.1
+# =============================================================================
+
+# Persistance SQLite
+persistence:
+  enabled: true
+  db_path: "fulcrum.db"
+  retention_days: 90       # conservation active
+  archive_days: 365        # archivage compressé
+  simhash_threshold: 0.85  # seuil similarité fuzzy (SimHash)
+
+# Clés API externes (optionnel)
+api_keys:
+  acled_key: null          # https://developer.acleddata.com/
+  acled_email: null
+  # twitter_bearer_token: null  # X/Twitter API v2 (réservé future implémentation)
+
+# Orchestration (APScheduler)
+scheduler:
+  enabled: false
+  collection_interval_minutes: 60
+  pruning_interval_hours: 24
+  retry_on_failure: true
+  max_retry_attempts: 3
+
+# Mode Watch
+watch:
+  enabled: false
+  interval_seconds: 300
+  hot_reload_config: true
+
+# =============================================================================
+# CATÉGORIES ET SOURCES — Fusion complète des 3 outils
+# =============================================================================
+
+categories:
+  # ---------------------------------------------------------------------------
+  # 1. CYBERSÉCURITÉ - EXPLOITS & CVEs (Wonitor)
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - Exploits & CVEs"
+    color: "#ff2a6d"
+    priority: 1
+    feeds:
+      - name: "CISA KEV Catalog"
+        url: "https://raw.githubusercontent.com/CryptoGenNepal/CVE-KEV-RSS/main/kev_feed.xml"
+        priority: "critical"
+        confidence: 9
+      - name: "Exploit-DB"
+        url: "https://www.exploit-db.com/rss.xml"
+        priority: "high"
+        confidence: 8
+      - name: "CVEfeed.io"
+        url: "https://cvefeed.io/rssfeed/latest.xml"
+        confidence: 7
+      - name: "GreyNoise KEV Ransomware"
+        url: "https://kev.labs.greynoise.io/kev-ransom-feed.rss"
+        priority: "high"
+        confidence: 8
+      - name: "NVD National Vuln DB"
+        url: "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml"
+        confidence: 9
+      - name: "VulDB"
+        url: "https://vuldb.com/rss/feed.rss"
+        confidence: 8
+      - name: "Rapid7 Vuln Disclosure"
+        url: "https://www.rapid7.com/rss/vulnerability-disclosure.xml"
+        confidence: 8
+      - name: "PacketStorm Security"
+        url: "https://rss.packetstormsecurity.com/files/"
+        confidence: 7
+      - name: "Project Zero"
+        url: "https://googleprojectzero.blogspot.com/feeds/posts/default"
+        confidence: 9
+      - name: "SSD Disclosure"
+        url: "https://ssd-disclosure.com/feed/"
+        confidence: 7
+      - name: "0day.today"
+        url: "https://0day.today/rss"
+        confidence: 6
+
+  # ---------------------------------------------------------------------------
+  # 2. CYBERSÉCURITÉ - MALWARE & THREAT INTEL (Wonitor)
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - Malware & Threat Intel"
+    color: "#05d5fa"
+    priority: 1
+    feeds:
+      - name: "ANY.RUN Malware Analysis"
+        url: "https://any.run/cybersecurity-blog/category/malware-analysis/feed/"
+        confidence: 7
+      - name: "Malware-Traffic-Analysis"
+        url: "https://malware-traffic-analysis.net/blog-entries.rss"
+        confidence: 8
+      - name: "NVISO Labs Malware"
+        url: "https://blog.nviso.eu/category/malware/feed/"
+        confidence: 7
+      - name: "ReversingLabs"
+        url: "https://www.reversinglabs.com/blog/tag/malware/rss.xml"
+        confidence: 8
+      - name: "Malware Patrol"
+        url: "https://www.malwarepatrol.net/blog/feed/"
+        confidence: 7
+      - name: "Kryptos Logic"
+        url: "https://kryptoslogic.com/blog/category/malware/feed/"
+        confidence: 7
+      - name: "My Online Security"
+        url: "https://myonlinesecurity.co.uk/category/malware/feed/"
+        confidence: 6
+      - name: "ThreatFox IOCs"
+        url: "https://threatfox.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "MalwareBazaar"
+        url: "https://bazaar.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "URLhaus"
+        url: "https://urlhaus.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "Feodo Tracker"
+        url: "https://feodotracker.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "CyberCrime Tracker"
+        url: "https://cybercrime-tracker.net/rss.xml"
+        confidence: 7
+      - name: "Ransomware.live"
+        url: "https://ransomware.live/feed.xml"
+        priority: "high"
+        confidence: 8
+      - name: "vx-underground"
+        url: "https://vx-underground.org/rss.xml"
+        confidence: 7
+
+  # ---------------------------------------------------------------------------
+  # 3. CYBERSÉCURITÉ - NEWS & ANALYSES (Wonitor)
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - News & Analyses"
+    color: "#00d4aa"
+    priority: 2
+    feeds:
+      - name: "ANSSI – Alertes"
+        url: "https://www.cert.ssi.gouv.fr/feed/"
+        confidence: 9
+      - name: "CERT-FR – Bulletins"
+        url: "https://www.cert.ssi.gouv.fr/alerte/feed/"
+        confidence: 9
+      - name: "ENISA News"
+        url: "https://www.enisa.europa.eu/news/rss"
+        confidence: 8
+      - name: "Krebs on Security"
+        url: "https://krebsonsecurity.com/feed/"
+        priority: "high"
+        confidence: 9
+      - name: "Schneier on Security"
+        url: "https://www.schneier.com/feed/atom"
+        confidence: 9
+      - name: "The Hacker News"
+        url: "https://feeds.feedburner.com/TheHackersNews"
+        priority: "high"
+        confidence: 8
+      - name: "BleepingComputer"
+        url: "https://www.bleepingcomputer.com/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "Dark Reading"
+        url: "https://www.darkreading.com/rss.xml"
+        confidence: 7
+      - name: "SecurityWeek"
+        url: "https://feeds.feedburner.com/securityweek"
+        confidence: 7
+      - name: "Recorded Future"
+        url: "https://www.recordedfuture.com/feed"
+        confidence: 8
+      - name: "Cyber Scoop"
+        url: "https://cyberscoop.com/feed/"
+        confidence: 7
+      - name: "HIBP – Breaches"
+        url: "https://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches"
+        priority: "high"
+        confidence: 9
+      - name: "Threatpost"
+        url: "https://threatpost.com/feed/"
+        confidence: 7
+      - name: "SANS Internet Storm Center"
+        url: "https://isc.sans.edu/rssfeed.xml"
+        confidence: 8
+      - name: "Cisco Talos"
+        url: "https://blog.talosintelligence.com/feeds/posts/default"
+        confidence: 9
+      - name: "Microsoft Security"
+        url: "https://www.microsoft.com/en-us/security/blog/feed/"
+        confidence: 9
+      - name: "CrowdStrike Blog"
+        url: "https://www.crowdstrike.com/blog/feed/"
+        confidence: 9
+      - name: "Mandiant"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 9
+      - name: "Unit42"
+        url: "https://unit42.paloaltonetworks.com/feed/"
+        confidence: 9
+      - name: "Securelist"
+        url: "https://securelist.com/feed/"
+        confidence: 8
+
+  # ---------------------------------------------------------------------------
+  # 4. DÉFENSE & ARMEMENT (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Defense & Armament"
+    color: "#e05c2a"
+    priority: 1
+    feeds:
+      - name: "Defense One"
+        url: "https://www.defenseone.com/rss/"
+        confidence: 7
+      - name: "Breaking Defense"
+        url: "https://breakingdefense.com/feed/"
+        confidence: 7
+      - name: "Defense News"
+        url: "https://www.defensenews.com/arc/outbound/rss"
+        confidence: 8
+      - name: "Opex360"
+        url: "https://www.opex360.com/feed/"
+        confidence: 7
+      - name: "Jane's Defence"
+        url: "https://www.janes.com/feeds/news"
+        confidence: 8
+      - name: "Army Technology"
+        url: "https://www.army-technology.com/feed/"
+        confidence: 6
+      - name: "Naval News"
+        url: "https://www.navalnews.com/feed/"
+        confidence: 7
+      - name: "Naval Today"
+        url: "https://navaltoday.com/feed/"
+        confidence: 6
+      - name: "The Drive — War Zone"
+        url: "https://www.thedrive.com/the-war-zone/rss"
+        confidence: 7
+      - name: "Shephard Media"
+        url: "https://www.shephardmedia.com/rss/news/"
+        confidence: 7
+      - name: "Armée de Terre FR"
+        url: "https://www.defense.gouv.fr/terre/feed"
+        confidence: 8
+      - name: "DGA Actualités"
+        url: "https://www.defense.gouv.fr/dga/feed"
+        confidence: 8
+      - name: "UK MoD — Defence News"
+        url: "https://www.gov.uk/government/organisations/ministry-of-defence.atom"
+        confidence: 8
+      - name: "USNI News"
+        url: "https://news.usni.org/feed"
+        confidence: 8
+      - name: "Soldier Systems"
+        url: "https://soldiersystems.net/feed/"
+        confidence: 6
+      - name: "Military.com News"
+        url: "https://www.military.com/rss-feeds/content?category=news"
+        confidence: 6
+      - name: "Small Wars Journal"
+        url: "https://smallwarsjournal.com/blog/feed"
+        confidence: 7
+      - name: "Modern War Institute"
+        url: "https://mwi.westpoint.edu/feed/"
+        confidence: 8
+      - name: "IISS — Military Balance"
+        url: "https://www.iiss.org/rss"
+        confidence: 9
+
+  # ---------------------------------------------------------------------------
+  # 5. NUCLÉAIRE & PROLIFÉRATION (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Nuclear & Proliferation"
+    color: "#ff6b35"
+    priority: 1
+    feeds:
+      - name: "Bulletin of the Atomic Scientists"
+        url: "https://thebulletin.org/feed/"
+        priority: "critical"
+        confidence: 9
+      - name: "Arms Control Association"
+        url: "https://www.armscontrol.org/rss.xml"
+        confidence: 8
+      - name: "Arms Control Wonk"
+        url: "https://www.armscontrolwonk.com/feed.xml"
+        confidence: 8
+      - name: "FAS — Secrecy News"
+        url: "https://fas.org/blogs/secrecy/feed/"
+        priority: "high"
+        confidence: 9
+      - name: "FAS — Strategic Security"
+        url: "https://fas.org/publication/fas-and-strategic-security/feed/"
+        confidence: 8
+      - name: "Nuclear Threat Initiative (NTI)"
+        url: "https://www.nti.org/feed/"
+        priority: "high"
+        confidence: 9
+      - name: "NTI — Atomic Pulse"
+        url: "https://www.nti.org/risky-business/feed/"
+        confidence: 8
+      - name: "Nuclear Secrecy Blog"
+        url: "https://blog.nuclearsecrecy.com/feed/"
+        confidence: 7
+      - name: "38 North — DPRK Nucléaire"
+        url: "https://www.38north.org/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "SIPRI — Armements"
+        url: "https://www.sipri.org/rss"
+        confidence: 9
+      - name: "War on the Rocks — Nuclear"
+        url: "https://warontherocks.com/category/nuclear-weapons/feed/"
+        confidence: 8
+      - name: "Union of Concerned Scientists"
+        url: "https://blog.ucs.org/category/global-security/feed/"
+        confidence: 7
+      - name: "ICAN — Campagne Abolition"
+        url: "https://www.icanw.org/updates.rss"
+        confidence: 6
+      - name: "Nuclear News (ANS)"
+        url: "https://nuclear-news.net/feed/"
+        confidence: 6
+      - name: "NRC — US Nuclear Regulatory"
+        url: "https://www.nrc.gov/public-involve/rss-feeds/news-releases.xml"
+        confidence: 7
+      - name: "NNSA — National Security"
+        url: "https://www.energy.gov/nnsa/rss.xml"
+        confidence: 7
+      - name: "AIEA — Actualités"
+        url: "https://www.iaea.org/feeds/rss/news.rss"
+        confidence: 9
+      - name: "CTBTO — Comprehensive Test Ban"
+        url: "https://www.ctbto.org/rss"
+        confidence: 8
+      - name: "Middlebury Institute CNS"
+        url: "https://www.nonproliferation.org/feed/"
+        confidence: 8
+      - name: "Stimson Center — Nuclear"
+        url: "https://www.stimson.org/topic/nuclear/feed/"
+        confidence: 7
+
+  # ---------------------------------------------------------------------------
+  # 6. AÉROSPATIALE & DÉFENSE AÉRIENNE (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Aerospace & Air Defense"
+    color: "#7c5cbf"
+    priority: 2
+    feeds:
+      - name: "Aviation Week — Defense"
+        url: "https://aviationweek.com/rss"
+        confidence: 8
+      - name: "Air & Cosmos"
+        url: "https://www.air-cosmos.com/feed"
+        confidence: 7
+      - name: "Aerobuzz"
+        url: "https://www.aerobuzz.fr/feed/"
+        confidence: 6
+      - name: "Defense News — Air"
+        url: "https://www.defensenews.com/air/rss/"
+        confidence: 7
+      - name: "FlightGlobal"
+        url: "https://www.flightglobal.com/rss"
+        confidence: 7
+      - name: "Air Force Magazine"
+        url: "https://www.airforcemag.com/feed/"
+        confidence: 7
+      - name: "Space News"
+        url: "https://spacenews.com/feed/"
+        confidence: 8
+      - name: "The Space Review"
+        url: "https://www.thespacereview.com/RSS"
+        confidence: 7
+      - name: "SpaceFlightNow"
+        url: "https://spaceflightnow.com/feed/"
+        confidence: 7
+      - name: "ESA — News"
+        url: "https://www.esa.int/rssfeed/Our_Activities/Space_News"
+        confidence: 8
+      - name: "NASA — Breaking News"
+        url: "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+        confidence: 8
+      - name: "Parabolic Arc"
+        url: "https://parabolicarc.com/feed/"
+        confidence: 6
+      - name: "SpacePolicyOnline"
+        url: "https://spacepolicyonline.com/feed/"
+        confidence: 7
+      - name: "Ars Technica — Space"
+        url: "https://feeds.arstechnica.com/arstechnica/science"
+        confidence: 7
+      - name: "AIN Online"
+        url: "https://www.ainonline.com/rss.xml"
+        confidence: 6
+      - name: "GIFAS — Actualités"
+        url: "https://www.gifas.fr/feed/"
+        confidence: 6
+      - name: "Armée de l'Air & Espace"
+        url: "https://www.defense.gouv.fr/aaae/feed"
+        confidence: 7
+      - name: "C4ISRNET"
+        url: "https://www.c4isrnet.com/rss/"
+        confidence: 7
+      - name: "LeoLabs Space"
+        url: "https://leolabs.com/feed/"
+        confidence: 7
+
+  # ---------------------------------------------------------------------------
+  # 7. RENSEIGNEMENT & OPÉRATIONS SPÉCIALES (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Intelligence & Special Ops"
+    color: "#2ecc71"
+    priority: 1
+    feeds:
+      - name: "RAND Corporation"
+        url: "https://www.rand.org/pubs/rss"
+        confidence: 9
+      - name: "War on the Rocks"
+        url: "https://warontherocks.com/feed/"
+        confidence: 8
+      - name: "Bellingcat OSINT"
+        url: "https://www.bellingcat.com/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "Intel Today"
+        url: "https://inteltoday.org/feed/"
+        confidence: 6
+      - name: "The Cipher Brief"
+        url: "https://thecipherbrief.com/feed"
+        confidence: 7
+      - name: "Lawfare — National Security"
+        url: "https://www.lawfaremedia.org/feed"
+        confidence: 8
+      - name: "Just Security"
+        url: "https://www.justsecurity.org/feed/"
+        confidence: 7
+      - name: "CNA — Analysis"
+        url: "https://www.cna.org/rss.xml"
+        confidence: 7
+      - name: "CSIS — Strategic Studies"
+        url: "https://www.csis.org/rss"
+        confidence: 8
+      - name: "ISW — War Updates"
+        url: "https://www.understandingwar.org/feed"
+        priority: "high"
+        confidence: 8
+      - name: "ACLED — Conflict Data"
+        url: "https://acleddata.com/feed/"
+        confidence: 8
+      - name: "Wilson Center"
+        url: "https://www.wilsoncenter.org/rss.xml"
+        confidence: 7
+      - name: "Intercept — National Sec."
+        url: "https://theintercept.com/feed/?rss"
+        confidence: 6
+      - name: "ProPublica National Sec."
+        url: "https://www.propublica.org/feeds/propublica/national-security"
+        confidence: 7
+
+  # ---------------------------------------------------------------------------
+  # 8. GÉOPOLITIQUE & RELATIONS INTERNATIONALES (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Geopolitics & IR"
+    color: "#e84393"
+    priority: 2
+    feeds:
+      - name: "Foreign Affairs"
+        url: "https://www.foreignaffairs.com/rss.xml"
+        confidence: 8
+      - name: "Foreign Policy"
+        url: "https://foreignpolicy.com/feed/"
+        confidence: 8
+      - name: "The Economist — World"
+        url: "https://www.economist.com/the-world-this-week/rss.xml"
+        confidence: 8
+      - name: "Le Grand Continent"
+        url: "https://legrandcontinent.eu/feed/"
+        confidence: 7
+      - name: "IRIS — Géopolitique"
+        url: "https://www.iris-france.org/feed/"
+        confidence: 7
+      - name: "Institut Montaigne"
+        url: "https://www.institutmontaigne.org/rss"
+        confidence: 6
+      - name: "Council on Foreign Relations"
+        url: "https://www.cfr.org/rss/all"
+        confidence: 9
+      - name: "Carnegie Endowment"
+        url: "https://carnegieendowment.org/rss"
+        confidence: 8
+      - name: "Chatham House"
+        url: "https://www.chathamhouse.org/rss"
+        confidence: 8
+      - name: "Brookings Institution"
+        url: "https://www.brookings.edu/feed/"
+        confidence: 8
+      - name: "Atlantic Council"
+        url: "https://www.atlanticcouncil.org/feed/"
+        confidence: 7
+      - name: "Reuters — World"
+        url: "https://feeds.reuters.com/reuters/worldNews"
+        confidence: 8
+      - name: "Le Monde — International"
+        url: "https://www.lemonde.fr/international/rss_full.xml"
+        confidence: 7
+      - name: "Courrier International"
+        url: "https://www.courrierinternational.com/feed/all/rss.xml"
+        confidence: 6
+      - name: "Orient XXI"
+        url: "https://orientxxi.info/feed/"
+        confidence: 6
+      - name: "ISN ETH Zürich"
+        url: "https://www.files.ethz.ch/isn/rss/isn_rss.xml"
+        confidence: 7
+      - name: "Stratfor Worldview"
+        url: "https://worldview.stratfor.com/rss"
+        confidence: 7
+      - name: "ECFR — European Policy"
+        url: "https://ecfr.eu/feed/"
+        confidence: 7
+      - name: "IFRI — Actualités"
+        url: "https://www.ifri.org/fr/rss"
+        confidence: 7
+
+  # ---------------------------------------------------------------------------
+  # 9. CONFLITS & TERRAIN (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Conflicts & Battlefield"
+    color: "#c0392b"
+    priority: 1
+    feeds:
+      - name: "ISW — Ukraine/Russia"
+        url: "https://www.understandingwar.org/feed"
+        priority: "critical"
+        confidence: 8
+      - name: "UA Warspotting"
+        url: "https://www.oryxspioenkop.com/feeds/posts/default"
+        confidence: 7
+      - name: "Oryx — Equipment Losses"
+        url: "https://www.oryxspioenkop.com/feeds/posts/default"
+        confidence: 7
+      - name: "Kyiv Independent"
+        url: "https://kyivindependent.com/feed/"
+        confidence: 7
+      - name: "Middle East Eye"
+        url: "https://www.middleeasteye.net/rss"
+        confidence: 6
+      - name: "Al-Monitor"
+        url: "https://www.al-monitor.com/rss"
+        confidence: 7
+      - name: "South China Morning Post"
+        url: "https://www.scmp.com/rss/91/feed"
+        confidence: 6
+      - name: "The Diplomat"
+        url: "https://thediplomat.com/feed/"
+        confidence: 7
+      - name: "Radio Free Europe"
+        url: "https://www.rferl.org/api/z-pqejiuivur"
+        confidence: 6
+      - name: "Africa Defense Forum"
+        url: "https://adf-magazine.com/feed/"
+        confidence: 6
+      - name: "Sudan War Monitor"
+        url: "https://sudanwarmonitor.com/feed/"
+        confidence: 6
+      - name: "Long War Journal"
+        url: "https://www.longwarjournal.org/feed"
+        confidence: 7
+      - name: "Conflict Monitor ACLED"
+        url: "https://acleddata.com/feed/"
+        confidence: 8
+
+  # ---------------------------------------------------------------------------
+  # 10. DATA LEAKS & BREACHES — PREMIUM (LeakHunter)
+  # ---------------------------------------------------------------------------
+  - name: "Offensive - Data Leaks & Breaches"
+    color: "#ff0040"
+    priority: 0
+    feeds:
+      - name: "Security Affairs — Pierluigi Paganini"
+        url: "https://securityaffairs.com/feed"
+        priority: "critical"
+        confidence: 9
+        max_items: 30
+      - name: "Hackmageddon — Cyber Attacks"
+        url: "https://www.hackmageddon.com/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "The Hacker News — Breaches"
+        url: "https://feeds.feedburner.com/TheHackersNews"
+        priority: "critical"
+        confidence: 8
+      - name: "Infosecurity Magazine — Breaches"
+        url: "https://www.infosecurity-magazine.com/data-breaches/rss.xml"
+        priority: "high"
+        confidence: 7
+      - name: "BleepingComputer — Breach"
+        url: "https://www.bleepingcomputer.com/tag/breach/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "Cybernews — Leaks"
+        url: "https://cybernews.com/tag/data-breach/feed/"
+        priority: "high"
+        confidence: 7
+      - name: "HIBP — Latest Breaches"
+        url: "https://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches"
+        priority: "critical"
+        confidence: 10
+      - name: "DataBreaches.net"
+        url: "https://www.databreaches.net/feed/"
+        priority: "high"
+        confidence: 8
+      - name: "Krebs on Security — Breaches"
+        url: "https://krebsonsecurity.com/feed/"
+        priority: "high"
+        confidence: 9
+      - name: "Dark Reading — Breaches"
+        url: "https://www.darkreading.com/rss.xml"
+        confidence: 7
+      - name: "IT Security Guru"
+        url: "https://itsecurityguru.org/feed"
+        confidence: 6
+      - name: "HackRead"
+        url: "https://hackread.com/feed"
+        confidence: 6
+      - name: "GBHackers"
+        url: "https://gbhackers.com/feed"
+        confidence: 6
+      - name: "Troy Hunt Blog"
+        url: "https://www.troyhunt.com/rss/"
+        confidence: 9
+      - name: "Privacy Affairs"
+        url: "https://www.privacyaffairs.com/feed/"
+        confidence: 6
+
+  # ---------------------------------------------------------------------------
+  # 11. MALWARE & RANSOMWARE (LeakHunter)
+  # ---------------------------------------------------------------------------
+  - name: "Offensive - Malware & Ransomware"
+    color: "#c0392b"
+    priority: 1
+    feeds:
+      - name: "Ransomware.live Feed"
+        url: "https://ransomware.live/feed.xml"
+        priority: "high"
+        confidence: 8
+      - name: "vx-underground"
+        url: "https://vx-underground.org/rss.xml"
+        confidence: 7
+      - name: "ThreatFox"
+        url: "https://threatfox.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "MalwareBazaar"
+        url: "https://bazaar.abuse.ch/browse/rss/"
+        confidence: 8
+      - name: "ANY.RUN"
+        url: "https://any.run/cybersecurity-blog/category/malware-analysis/feed/"
+        confidence: 7
+      - name: "Cisco Talos — Ransomware"
+        url: "https://blog.talosintelligence.com/feeds/posts/default"
+        confidence: 8
+      - name: "CrowdStrike — Ransomware"
+        url: "https://www.crowdstrike.com/blog/feed/"
+        confidence: 8
+      - name: "Mandiant — Ransomware"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 8
+
+  # ---------------------------------------------------------------------------
+  # 12. TRAFIC AÉRIEN & AVIATION (Wonitor)
+  # ---------------------------------------------------------------------------
+  - name: "Aviation - Air Traffic & Safety"
+    color: "#f5a623"
+    priority: 3
+    feeds:
+      - name: "The Aviation Herald"
+        url: "https://avherald.com/rss.xml"
+        confidence: 8
+      - name: "AIN Online"
+        url: "https://www.ainonline.com/rss.xml"
+        confidence: 6
+      - name: "Simple Flying"
+        url: "https://simpleflying.com/feed/"
+        confidence: 5
+      - name: "Airways Magazine"
+        url: "https://airwaysmag.com/feed/"
+        confidence: 6
+      - name: "Runway Girl Network"
+        url: "https://runwaygirlnetwork.com/feed/"
+        confidence: 5
+      - name: "ch-aviation"
+        url: "https://www.ch-aviation.com/rss.xml"
+        confidence: 7
+      - name: "IATA – News"
+        url: "https://www.iata.org/en/pressroom/rss/"
+        confidence: 7
+      - name: "Eurocontrol – News"
+        url: "https://www.eurocontrol.int/rss.xml"
+        confidence: 7
+      - name: "Le Journal de l'Aviation"
+        url: "https://www.journal-aviation.com/feed/"
+        confidence: 6
+      - name: "Aviation24.be"
+        url: "https://www.aviation24.be/feed/"
+        confidence: 5
+      - name: "ATC Network"
+        url: "https://www.atcnetwork.com/feed/"
+        confidence: 6
+
+  # ---------------------------------------------------------------------------
+  # 13. CYBER-DÉFENSE & GUERRE ÉLECTRONIQUE (StratWatch)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Cyber Defense & EW"
+    color: "#00d4aa"
+    priority: 2
+    feeds:
+      - name: "C4ISRNET — Cyber"
+        url: "https://www.c4isrnet.com/cyber/rss/"
+        confidence: 7
+      - name: "Fifth Domain"
+        url: "https://www.fifthdomain.com/feed/"
+        confidence: 7
+      - name: "CyberScoop — Gov/Defense"
+        url: "https://cyberscoop.com/feed/"
+        confidence: 7
+      - name: "CISA — Alertes"
+        url: "https://www.cisa.gov/news.xml"
+        priority: "high"
+        confidence: 9
+      - name: "NSA — Cybersecurity"
+        url: "https://www.nsa.gov/news-features/press-room/rss/"
+        confidence: 8
+      - name: "ANSSI — Alertes"
+        url: "https://www.cert.ssi.gouv.fr/feed/"
+        confidence: 9
+      - name: "ENISA — News"
+        url: "https://www.enisa.europa.eu/news/rss"
+        confidence: 8
+      - name: "Recorded Future — Nation-State"
+        url: "https://www.recordedfuture.com/category/nation-state/feed"
+        confidence: 8
+      - name: "Mandiant APT Research"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 9
+      - name: "SentinelOne — Nation-State"
+        url: "https://www.sentinelone.com/labs/feed/"
+        confidence: 8
+      - name: "Lawfare — Cybersecurity"
+        url: "https://www.lawfaremedia.org/topics/cybersecurity/feed"
+        confidence: 7
+      - name: "NATO CCDCOE"
+        url: "https://ccdcoe.org/feed/"
+        confidence: 8
+
+# =============================================================================
+# FIN DE LA CONFIGURATION
+# =============================================================================

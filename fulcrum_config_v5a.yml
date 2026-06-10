@@ -1,0 +1,2288 @@
+# =============================================================================
+# FULCRUM CONFIGURATION — Full Spectrum Intelligence Platform
+# VERSION 5.0 — Crisis Cell Edition
+# =============================================================================
+# Fusion complète :
+#   - Wonitor      (Cyber sécurité, CVEs, Exploits)
+#   - StratWatch   (Défense, Nucléaire, Aérospatiale, Géopolitique)
+#   - LeakHunter   (Data Leaks, Breaches, Ransomware)
+#
+# ÉVOLUTIONS v5.0 (vs v4.0) :
+#   + Nouveau profil `crisis_cell` — mode opérationnel cellule de crise
+#   + Nouveau profil `oi_watch` — focus Opérateurs d'Importance Vitale
+#   + 3 nouvelles catégories :
+#       > Maritime - Shipping & Naval Ops  (AIS, FONOPS, détroits, câbles)
+#       > Strategic - Hybrid Warfare       (sabotages, GPS spoofing, pipelines)
+#       > Strategic - Energy & CI          (énergie, réseaux, eau, transport)
+#   + Scoring enrichi : maritime, energy, hybrid, sof
+#   + Profil `strat_watch` étendu : SOF, hybride, énergie
+#   + Fix doublons : ECFR (x2), AIN Online (canonical_in ambigu)
+#   + Feeds à confidence ≤ 5 supprimés des catégories priorité 1
+#   + Section `alerts` pré-configurée pour usage opérationnel
+#   + Champ `flash_note` sur feeds critiques (description courte)
+#   + Paramètre `source_bias` pour transparence éditoriale
+# =============================================================================
+
+app:
+  name: "FULCRUM Intelligence Platform"
+  version: "5.0"
+  description: "Full Spectrum Intelligence Fusion Center — Crisis Cell Edition"
+  theme: "ops"
+  timezone: "UTC"
+  debug: false
+  user_agent: "FULCRUM/5.0 (Intelligence Platform; +https://github.com/fulcrum)"
+
+collection:
+  max_items_per_feed: 25
+  request_timeout: 15
+  retry_attempts: 3
+  retry_backoff: 1.5
+  concurrent_workers: 12
+  rate_limit_per_host: 2
+  user_agent_rotation: true
+  proxy_rotation: false
+  deduplicate: true
+  scraping_enabled: true
+  leak_focused_mode: false
+
+cache:
+  enabled: true
+  type: "memory"  # memory | redis
+  redis_url: "redis://localhost:6379/0"
+  ttl_seconds: 3600
+  memory_max_items: 2000
+
+# =============================================================================
+# PROFILS OPÉRATIONNELS — switcher selon la mission
+# =============================================================================
+profiles:
+
+  cyber_ops:
+    description: "Focus cyber offensif et défensif, CVEs, malware, breaches"
+    active_categories:
+      - "Cyber - Exploits & CVEs"
+      - "Cyber - Malware & Threat Intel"
+      - "Cyber - News & Analyses"
+      - "Offensive - Data Leaks & Breaches"
+      - "Offensive - Malware & Ransomware"
+      - "Strategic - Cyber Defense & EW"
+      - "Cyber-Physical - SCADA & ICS"
+    scoring_boost:
+      exploit: +5
+      ransomware: +5
+      scada: +3
+
+  strat_watch:
+    description: "Focus géopolitique, défense, nucléaire, conflits, hybride"
+    active_categories:
+      - "Strategic - Defense & Armament"
+      - "Strategic - Nuclear & Proliferation"
+      - "Strategic - Aerospace & Air Defense"
+      - "Strategic - Intelligence & Special Ops"
+      - "Strategic - Geopolitics & IR"
+      - "Strategic - Conflicts & Battlefield"
+      - "Strategic - Cyber Defense & EW"
+      - "Strategic - Hybrid Warfare"
+      - "Strategic - Energy & Critical Infrastructure"
+      - "Maritime - Shipping & Naval Ops"
+    scoring_boost:
+      nuclear: +5
+      conflict: +5
+      hybrid: +4
+      maritime: +3
+
+  infowar:
+    description: "Focus guerre de l'information, désinformation, influence"
+    active_categories:
+      - "InfoWar - Disinformation & Influence Ops"
+      - "Strategic - Intelligence & Special Ops"
+      - "Strategic - Geopolitics & IR"
+    scoring_boost:
+      disinfo: +10
+      influence: +8
+      deepfake: +6
+
+  # NOUVEAU v5.0 — profil prioritaire pour l'audience cible
+  crisis_cell:
+    description: >
+      Mode cellule de crise — fusion temps réel des signaux à haute criticité.
+      Couvre l'ensemble du spectre avec seuils abaissés pour maximiser la détection
+      précoce. Destiné aux gardes opérationnelles et briefings d'urgence.
+    active_categories:
+      - "Cyber - Exploits & CVEs"
+      - "Cyber-Physical - SCADA & ICS"
+      - "Strategic - Conflicts & Battlefield"
+      - "Strategic - Nuclear & Proliferation"
+      - "Strategic - Hybrid Warfare"
+      - "Strategic - Energy & Critical Infrastructure"
+      - "Maritime - Shipping & Naval Ops"
+      - "Strategic - Cyber Defense & EW"
+      - "InfoWar - Disinformation & Influence Ops"
+      - "OSINT - Geospatial & Satellite Imagery"
+    scoring_boost:
+      scada: +8
+      nuclear: +8
+      hybrid: +7
+      maritime: +5
+      conflict: +5
+      disinfo: +4
+    flash_threshold_override: 80   # seuil flash abaissé en mode crise
+
+  # NOUVEAU v5.0 — focus Opérateurs d'Importance Vitale
+  oi_watch:
+    description: >
+      Mode OIV/OES — surveillance des menaces pesant sur les infrastructures critiques
+      nationales. Énergie, eau, transport, télécoms, défense industrielle.
+    active_categories:
+      - "Cyber-Physical - SCADA & ICS"
+      - "Strategic - Energy & Critical Infrastructure"
+      - "Strategic - Hybrid Warfare"
+      - "Cyber - Exploits & CVEs"
+      - "Strategic - Cyber Defense & EW"
+      - "Maritime - Shipping & Naval Ops"
+      - "Aviation - Air Traffic & Safety"
+    scoring_boost:
+      scada: +10
+      energy: +10
+      ics: +8
+      hybrid: +6
+      kev: +4
+
+  full_spectrum:
+    description: "Toutes catégories actives — mode fusion complète"
+    active_categories: "all"
+
+# =============================================================================
+# SCORING & SEUILS
+# =============================================================================
+intelligence:
+  scoring:
+    risk_weights:
+      critical: 40
+      exploit: 15
+      kev: 15
+      ransomware: 12
+      apt: 10
+      darkweb: 8
+      scada: 14        # infrastructure critique
+      ics: 14          # systèmes de contrôle industriels
+      energy: 12       # NOUVEAU — attaque énergie / réseau
+    strat_weights:
+      nuclear: 25
+      conflict: 15
+      weapons: 10
+      aerospace: 8
+      sanctions: 7
+      intel: 10
+      arctic: 8
+      taiwan: 9
+      sahel: 7
+      hybrid: 13       # NOUVEAU — guerre hybride (sabotage, spoofing, pipeline)
+      maritime: 10     # NOUVEAU — incidents maritimes stratégiques
+      sof: 9           # NOUVEAU — opérations spéciales confirmées
+      cable: 11        # NOUVEAU — câbles sous-marins / infrastructures critiques
+    info_weights:
+      disinfo: 12
+      influence: 10
+      propaganda: 8
+      deepfake: 9
+    osint_weights:
+      satellite: 10
+      geoint: 9
+      shiptracking: 8  # rehaussé (valeur opérationnelle)
+      adsb: 8          # rehaussé
+  thresholds:
+    critical_score: 85
+    high_score: 70
+    medium_score: 50
+    flash_threshold: 90
+
+export:
+  default_format: "html"
+  paths:
+    json: "fulcrum_export.json"
+    csv: "fulcrum_export.csv"
+    html: "fulcrum_dashboard.html"
+    pdf: "fulcrum_report.pdf"
+  auto_generate: true
+
+# =============================================================================
+# ALERTES — pré-configuré pour usage opérationnel
+# Décommenter et renseigner selon l'infrastructure de la cellule
+# =============================================================================
+alerts:
+  webhooks: []
+  # telegram_bot_token: "BOT_TOKEN_HERE"
+  # telegram_chat_id: "CHAT_ID_HERE"   # canal chiffré dédié recommandé
+  # slack_webhook: "SLACK_WEBHOOK_URL"
+  # discord_webhook: "DISCORD_WEBHOOK_URL"
+  telegram_bot_token: null
+  telegram_chat_id: null
+  slack_webhook: null
+  discord_webhook: null
+  critical_only: false
+  # Recommandation opérationnelle :
+  #   - critical_only: true  en veille passive (nuit, week-end)
+  #   - critical_only: false en garde active
+  minimum_score_for_alert: 85
+  deduplicate_window_minutes: 30
+  flash_prefix: "[⚡ FLASH FULCRUM]"
+  critical_prefix: "[🔴 CRITIQUE FULCRUM]"
+
+api:
+  enabled: false
+  host: "0.0.0.0"
+  port: 5000
+  cors: true
+  api_key: null
+
+# =============================================================================
+# CATÉGORIES ET SOURCES
+# =============================================================================
+# NOTE SUR LES DOUBLONS :
+#   Certains feeds apparaissent dans plusieurs catégories par pertinence croisée.
+#   Le flag `canonical_in` indique la catégorie de référence pour le scoring.
+#   Les occurrences secondaires sont marquées `role: "cross_ref"` et n'incrémentent
+#   pas le compteur de déduplication.
+#
+# NOTE SUR `source_bias` (NOUVEAU v5.0) :
+#   Indication de l'orientation éditoriale ou institutionnelle de la source.
+#   Valeurs : neutral | us_centric | eu_centric | fr_centric | pro_ukraine |
+#             pro_russia | pro_china | ngo | industry | think_tank | official
+#   Permet aux analystes d'pondérer les signaux en contexte.
+# =============================================================================
+
+categories:
+
+  # ---------------------------------------------------------------------------
+  # 1. CYBERSÉCURITÉ - EXPLOITS & CVEs
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - Exploits & CVEs"
+    color: "#ff2a6d"
+    priority: 1
+    feeds:
+      - name: "CISA KEV Catalog"
+        url: "https://raw.githubusercontent.com/CryptoGenNepal/CVE-KEV-RSS/main/kev_feed.xml"
+        priority: "critical"
+        confidence: 9
+        source_bias: official
+        flash_note: "Vulnérabilités activement exploitées — patch immédiat"
+        tags: [kev, cisa, vuln]
+      - name: "Exploit-DB"
+        url: "https://www.exploit-db.com/rss.xml"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [exploit, poc, vuln]
+      - name: "CVEfeed.io"
+        url: "https://cvefeed.io/rssfeed/latest.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [cve, vuln]
+      - name: "GreyNoise KEV Ransomware"
+        url: "https://kev.labs.greynoise.io/kev-ransom-feed.rss"
+        priority: "high"
+        confidence: 8
+        source_bias: industry
+        tags: [kev, ransomware, vuln]
+      - name: "NVD National Vuln DB"
+        url: "https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml"
+        confidence: 9
+        source_bias: official
+        tags: [cve, nvd, nist]
+      - name: "VulDB"
+        url: "https://vuldb.com/rss/feed.rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [vuln, cve]
+      - name: "Rapid7 Vuln Disclosure"
+        url: "https://www.rapid7.com/rss/vulnerability-disclosure.xml"
+        confidence: 8
+        source_bias: industry
+        tags: [vuln, disclosure]
+      - name: "PacketStorm Security"
+        url: "https://rss.packetstormsecurity.com/files/"
+        confidence: 7
+        source_bias: neutral
+        tags: [exploit, poc, tools]
+      - name: "Project Zero"
+        url: "https://googleprojectzero.blogspot.com/feeds/posts/default"
+        confidence: 9
+        source_bias: industry
+        tags: [0day, research, google]
+      - name: "SSD Disclosure"
+        url: "https://ssd-disclosure.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [disclosure, 0day]
+      - name: "0day.today"
+        url: "https://0day.today/rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [0day, exploit]
+      - name: "Tenable Research"
+        url: "https://www.tenable.com/blog/feed"
+        confidence: 8
+        source_bias: industry
+        tags: [vuln, research, cve]
+      - name: "Qualys Security Blog"
+        url: "https://blog.qualys.com/feed"
+        confidence: 8
+        source_bias: industry
+        tags: [vuln, patch, cve]
+      - name: "WithSecure Labs"
+        url: "https://labs.withsecure.com/feed"
+        confidence: 8
+        source_bias: industry
+        tags: [research, exploit, disclosure]
+      - name: "WatchTowr Labs"
+        url: "https://labs.watchtowr.com/feed"
+        confidence: 8
+        source_bias: neutral
+        tags: [exploit, 0day, research]
+
+  # ---------------------------------------------------------------------------
+  # 2. CYBERSÉCURITÉ - MALWARE & THREAT INTEL
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - Malware & Threat Intel"
+    color: "#05d5fa"
+    priority: 1
+    feeds:
+      - name: "ANY.RUN Malware Analysis"
+        url: "https://any.run/cybersecurity-blog/category/malware-analysis/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [malware, sandbox, analysis]
+      - name: "Malware-Traffic-Analysis"
+        url: "https://malware-traffic-analysis.net/blog-entries.rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [malware, pcap, ioc]
+      - name: "NVISO Labs Malware"
+        url: "https://blog.nviso.eu/category/malware/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [malware, research]
+      - name: "ReversingLabs"
+        url: "https://www.reversinglabs.com/blog/tag/malware/rss.xml"
+        confidence: 8
+        source_bias: industry
+        tags: [malware, reversing, supply-chain]
+      - name: "ThreatFox IOCs"
+        url: "https://threatfox.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Cyber - Malware & Threat Intel"
+        tags: [ioc, malware, c2]
+      - name: "MalwareBazaar"
+        url: "https://bazaar.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Cyber - Malware & Threat Intel"
+        tags: [malware, sample, hash]
+      - name: "URLhaus"
+        url: "https://urlhaus.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        tags: [url, malware, ioc]
+      - name: "Feodo Tracker"
+        url: "https://feodotracker.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        tags: [botnet, c2, ioc]
+      - name: "CyberCrime Tracker"
+        url: "https://cybercrime-tracker.net/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [malware, c2, cybercrime]
+      - name: "Ransomware.live"
+        url: "https://ransomware.live/feed.xml"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Cyber - Malware & Threat Intel"
+        flash_note: "Victimes ransomware en temps réel — surveiller OIV/OES"
+        tags: [ransomware, leak, victim]
+      - name: "vx-underground"
+        url: "https://vx-underground.org/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        canonical_in: "Cyber - Malware & Threat Intel"
+        tags: [malware, sample, underground]
+      - name: "Elastic Security Labs"
+        url: "https://www.elastic.co/security-labs/rss/feed.xml"
+        confidence: 8
+        source_bias: industry
+        tags: [threat-intel, malware, apt]
+      - name: "BlackBerry Threat Research"
+        url: "https://blogs.blackberry.com/en/category/research-and-intelligence/feed"
+        confidence: 8
+        source_bias: industry
+        tags: [apt, malware, research]
+      - name: "Recorded Future Threat Intel"
+        url: "https://www.recordedfuture.com/category/threat-intelligence/feed"
+        confidence: 9
+        source_bias: industry
+        tags: [threat-intel, apt, ioc]
+      - name: "ESET Research"
+        url: "https://www.welivesecurity.com/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [malware, apt, research]
+
+  # ---------------------------------------------------------------------------
+  # 3. CYBERSÉCURITÉ - NEWS & ANALYSES
+  # ---------------------------------------------------------------------------
+  - name: "Cyber - News & Analyses"
+    color: "#00d4aa"
+    priority: 2
+    feeds:
+      - name: "ANSSI – Alertes"
+        url: "https://www.cert.ssi.gouv.fr/feed/"
+        confidence: 9
+        source_bias: official
+        canonical_in: "Cyber - News & Analyses"
+        tags: [cert, fr, official]
+      - name: "CERT-FR – Bulletins"
+        url: "https://www.cert.ssi.gouv.fr/alerte/feed/"
+        confidence: 9
+        source_bias: official
+        tags: [cert, fr, alerte]
+      - name: "ENISA News"
+        url: "https://www.enisa.europa.eu/news/rss"
+        confidence: 8
+        source_bias: eu_centric
+        canonical_in: "Cyber - News & Analyses"
+        tags: [eu, cert, policy]
+      - name: "Krebs on Security"
+        url: "https://krebsonsecurity.com/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        canonical_in: "Cyber - News & Analyses"
+        tags: [breach, cybercrime, investigative]
+      - name: "Schneier on Security"
+        url: "https://www.schneier.com/feed/atom"
+        confidence: 9
+        source_bias: neutral
+        tags: [analysis, policy, research]
+      - name: "The Hacker News"
+        url: "https://feeds.feedburner.com/TheHackersNews"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Cyber - News & Analyses"
+        tags: [news, vuln, breach]
+      - name: "BleepingComputer"
+        url: "https://www.bleepingcomputer.com/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Cyber - News & Analyses"
+        tags: [news, breach, ransomware]
+      - name: "Dark Reading"
+        url: "https://www.darkreading.com/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        canonical_in: "Cyber - News & Analyses"
+        tags: [news, analysis]
+      - name: "SecurityWeek"
+        url: "https://feeds.feedburner.com/securityweek"
+        confidence: 7
+        source_bias: neutral
+        tags: [news, industry]
+      - name: "Recorded Future"
+        url: "https://www.recordedfuture.com/feed"
+        confidence: 8
+        source_bias: industry
+        canonical_in: "Cyber - News & Analyses"
+        tags: [threat-intel, news]
+      - name: "Cyber Scoop"
+        url: "https://cyberscoop.com/feed/"
+        confidence: 7
+        source_bias: us_centric
+        canonical_in: "Cyber - News & Analyses"
+        tags: [news, policy, gov]
+      - name: "HIBP – Breaches"
+        url: "https://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        canonical_in: "Cyber - News & Analyses"
+        tags: [breach, hibp, leak]
+      - name: "SANS Internet Storm Center"
+        url: "https://isc.sans.edu/rssfeed.xml"
+        confidence: 8
+        source_bias: neutral
+        tags: [isc, diary, threat]
+      - name: "Cisco Talos"
+        url: "https://blog.talosintelligence.com/feeds/posts/default"
+        confidence: 9
+        source_bias: industry
+        canonical_in: "Cyber - News & Analyses"
+        tags: [threat-intel, malware, research]
+      - name: "Microsoft Security"
+        url: "https://www.microsoft.com/en-us/security/blog/feed/"
+        confidence: 9
+        source_bias: industry
+        tags: [microsoft, vuln, apt]
+      - name: "CrowdStrike Blog"
+        url: "https://www.crowdstrike.com/blog/feed/"
+        confidence: 9
+        source_bias: industry
+        canonical_in: "Cyber - News & Analyses"
+        tags: [apt, threat-intel, research]
+      - name: "Mandiant"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 9
+        source_bias: industry
+        canonical_in: "Cyber - News & Analyses"
+        tags: [apt, threat-intel, ir]
+      - name: "Unit42"
+        url: "https://unit42.paloaltonetworks.com/feed/"
+        confidence: 9
+        source_bias: industry
+        tags: [apt, malware, research]
+      - name: "Securelist"
+        url: "https://securelist.com/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [apt, kaspersky, research]
+      - name: "Infosecurity Magazine"
+        url: "https://www.infosecurity-magazine.com/rss/news/"
+        confidence: 7
+        source_bias: neutral
+        tags: [news, industry]
+      - name: "The Record — Recorded Future"
+        url: "https://therecord.media/feed"
+        confidence: 8
+        source_bias: neutral
+        tags: [news, cyber, policy]
+      - name: "Wired — Security"
+        url: "https://www.wired.com/feed/category/security/latest/rss"
+        confidence: 7
+        source_bias: us_centric
+        tags: [news, analysis, longform]
+
+  # ---------------------------------------------------------------------------
+  # 4. DÉFENSE & ARMEMENT
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Defense & Armament"
+    color: "#e05c2a"
+    priority: 1
+    feeds:
+      - name: "Defense One"
+        url: "https://www.defenseone.com/rss/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [defense, us, policy]
+      - name: "Breaking Defense"
+        url: "https://breakingdefense.com/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [defense, procurement, industry]
+      - name: "Defense News"
+        url: "https://www.defensenews.com/arc/outbound/rss"
+        confidence: 8
+        source_bias: us_centric
+        tags: [defense, news, global]
+      - name: "Opex360"
+        url: "https://www.opex360.com/feed/"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [defense, fr, opex]
+      - name: "Jane's Defence"
+        url: "https://www.janes.com/feeds/news"
+        confidence: 8
+        source_bias: neutral
+        tags: [defense, analysis, global]
+      - name: "Army Technology"
+        url: "https://www.army-technology.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [army, land, systems]
+      - name: "Naval News"
+        url: "https://www.navalnews.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [naval, maritime, fleet]
+      - name: "Naval Today"
+        url: "https://navaltoday.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [naval, news]
+      - name: "The Drive — War Zone"
+        url: "https://www.thedrive.com/the-war-zone/rss"
+        confidence: 7
+        source_bias: us_centric
+        tags: [defense, exclusive, analysis]
+      - name: "Shephard Media"
+        url: "https://www.shephardmedia.com/rss/news/"
+        confidence: 7
+        source_bias: neutral
+        tags: [defense, industry, procurement]
+      - name: "Armée de Terre FR"
+        url: "https://www.defense.gouv.fr/terre/feed"
+        confidence: 8
+        source_bias: official
+        tags: [fr, army, official]
+      - name: "DGA Actualités"
+        url: "https://www.defense.gouv.fr/dga/feed"
+        confidence: 8
+        source_bias: official
+        tags: [fr, procurement, dga]
+      - name: "UK MoD — Defence News"
+        url: "https://www.gov.uk/government/organisations/ministry-of-defence.atom"
+        confidence: 8
+        source_bias: official
+        tags: [uk, official, mod]
+      - name: "USNI News"
+        url: "https://news.usni.org/feed"
+        confidence: 8
+        source_bias: us_centric
+        tags: [us, naval, congress]
+      - name: "Small Wars Journal"
+        url: "https://smallwarsjournal.com/blog/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [doctrine, counterinsurgency, analysis]
+      - name: "Modern War Institute"
+        url: "https://mwi.westpoint.edu/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [westpoint, doctrine, strategy]
+      - name: "IISS — Military Balance"
+        url: "https://www.iiss.org/rss"
+        confidence: 9
+        source_bias: neutral
+        tags: [iiss, balance, global]
+      - name: "Bundeswehr Journal"
+        url: "https://www.bundeswehr-journal.de/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [de, bundeswehr, europe]
+      - name: "EU Military Staff (EUMS)"
+        url: "https://www.eeas.europa.eu/eeas/rss_en"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [eu, eums, csdp]
+      - name: "Guerres & Conflits"
+        url: "https://guerres-et-conflits.com/feed/"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, defense, analysis]
+      - name: "EurAsian Times — Defense"
+        url: "https://eurasiantimes.com/category/defence/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [asia, defense, news]
+
+  # ---------------------------------------------------------------------------
+  # 5. NUCLÉAIRE & PROLIFÉRATION
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Nuclear & Proliferation"
+    color: "#ff6b35"
+    priority: 1
+    feeds:
+      - name: "Bulletin of the Atomic Scientists"
+        url: "https://thebulletin.org/feed/"
+        priority: "critical"
+        confidence: 9
+        source_bias: neutral
+        flash_note: "Réf. Doomsday Clock — indicateur posture nucléaire mondiale"
+        tags: [nuclear, doomsday, policy]
+      - name: "Arms Control Association"
+        url: "https://www.armscontrol.org/rss.xml"
+        confidence: 8
+        source_bias: neutral
+        tags: [arms-control, treaty, policy]
+      - name: "Arms Control Wonk"
+        url: "https://www.armscontrolwonk.com/feed.xml"
+        confidence: 8
+        source_bias: us_centric
+        tags: [nuclear, analysis, blog]
+      - name: "FAS — Secrecy News"
+        url: "https://fas.org/blogs/secrecy/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        tags: [fas, secrecy, nuclear]
+      - name: "FAS — Strategic Security"
+        url: "https://fas.org/publication/fas-and-strategic-security/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [fas, strategy, nuclear]
+      - name: "Nuclear Threat Initiative (NTI)"
+        url: "https://www.nti.org/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        flash_note: "Incidents NBC et prolifération — criticité maximale"
+        tags: [nti, proliferation, wmd]
+      - name: "NTI — Atomic Pulse"
+        url: "https://www.nti.org/risky-business/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [nti, nuclear, blog]
+      - name: "Nuclear Secrecy Blog"
+        url: "https://blog.nuclearsecrecy.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [nuclear, history, declassified]
+      - name: "38 North — DPRK Nucléaire"
+        url: "https://www.38north.org/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: us_centric
+        tags: [dprk, north-korea, nuclear]
+      - name: "SIPRI — Armements"
+        url: "https://www.sipri.org/rss"
+        confidence: 9
+        source_bias: neutral
+        tags: [sipri, arms, global]
+      - name: "War on the Rocks — Nuclear"
+        url: "https://warontherocks.com/category/nuclear-weapons/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [nuclear, strategy, analysis]
+      - name: "Union of Concerned Scientists"
+        url: "https://blog.ucs.org/category/global-security/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [nuclear, science, policy]
+      - name: "NRC — US Nuclear Regulatory"
+        url: "https://www.nrc.gov/public-involve/rss-feeds/news-releases.xml"
+        confidence: 7
+        source_bias: official
+        tags: [us, nrc, regulatory]
+      - name: "NNSA — National Security"
+        url: "https://www.energy.gov/nnsa/rss.xml"
+        confidence: 7
+        source_bias: official
+        tags: [us, nnsa, stockpile]
+      - name: "AIEA — Actualités"
+        url: "https://www.iaea.org/feeds/rss/news.rss"
+        confidence: 9
+        source_bias: official
+        flash_note: "Référence officielle AIEA — safeguards et incidents nucléaires"
+        tags: [iaea, safeguards, official]
+      - name: "CTBTO — Comprehensive Test Ban"
+        url: "https://www.ctbto.org/rss"
+        confidence: 8
+        source_bias: official
+        flash_note: "Alertes sismiques et acoustiques — détection essais nucléaires"
+        tags: [ctbt, monitoring, seismic]
+      - name: "Middlebury Institute CNS"
+        url: "https://www.nonproliferation.org/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [cns, proliferation, research]
+      - name: "Stimson Center — Nuclear"
+        url: "https://www.stimson.org/topic/nuclear/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [nuclear, policy, stimson]
+      - name: "ICAN — Campagne Abolition"
+        url: "https://www.icanw.org/updates.rss"
+        confidence: 6
+        source_bias: ngo
+        tags: [nuclear, disarmament, ngo]
+
+  # ---------------------------------------------------------------------------
+  # 6. AÉROSPATIALE & DÉFENSE AÉRIENNE
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Aerospace & Air Defense"
+    color: "#7c5cbf"
+    priority: 2
+    feeds:
+      - name: "Aviation Week — Defense"
+        url: "https://aviationweek.com/rss"
+        confidence: 8
+        source_bias: us_centric
+        tags: [aerospace, defense, industry]
+      - name: "Air & Cosmos"
+        url: "https://www.air-cosmos.com/feed"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, aerospace, defense]
+      - name: "Defense News — Air"
+        url: "https://www.defensenews.com/air/rss/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [air, defense, us]
+      - name: "FlightGlobal"
+        url: "https://www.flightglobal.com/rss"
+        confidence: 7
+        source_bias: neutral
+        tags: [aviation, global, industry]
+      - name: "Air Force Magazine"
+        url: "https://www.airforcemag.com/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [usaf, air, policy]
+      - name: "Space News"
+        url: "https://spacenews.com/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [space, launch, policy]
+      - name: "The Space Review"
+        url: "https://www.thespacereview.com/RSS"
+        confidence: 7
+        source_bias: us_centric
+        tags: [space, analysis, policy]
+      - name: "SpaceFlightNow"
+        url: "https://spaceflightnow.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [space, launch, tracking]
+      - name: "ESA — News"
+        url: "https://www.esa.int/rssfeed/Our_Activities/Space_News"
+        confidence: 8
+        source_bias: official
+        tags: [esa, eu, space]
+      - name: "NASA — Breaking News"
+        url: "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+        confidence: 8
+        source_bias: official
+        tags: [nasa, us, space]
+      - name: "Armée de l'Air & Espace"
+        url: "https://www.defense.gouv.fr/aaae/feed"
+        confidence: 7
+        source_bias: official
+        tags: [fr, air, official]
+      - name: "C4ISRNET"
+        url: "https://www.c4isrnet.com/rss/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [c4isr, air, space]
+        role: "cross_ref"
+        canonical_in: "Strategic - Cyber Defense & EW"
+      - name: "LeoLabs Space"
+        url: "https://leolabs.com/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [space, leo, debris]
+      - name: "Secure World Foundation"
+        url: "https://swfound.org/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [space, security, policy]
+      - name: "Space Intel Report"
+        url: "https://spaceintelreport.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [space, intel, satellite]
+      - name: "GIFAS — Actualités"
+        url: "https://www.gifas.fr/feed/"
+        confidence: 6
+        source_bias: industry
+        tags: [fr, industry, aerospace]
+      - name: "Aerospace Security Project (CSIS)"
+        url: "https://aerospace.csis.org/feed/"
+        confidence: 8
+        source_bias: think_tank
+        canonical_in: "Strategic - Aerospace & Air Defense"
+        tags: [space, asat, csis]
+      - name: "Secure World Foundation — Space Security"
+        url: "https://swfound.org/tag/space-security/feed/"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [space, security, asat]
+
+  # ---------------------------------------------------------------------------
+  # 7. RENSEIGNEMENT & OPÉRATIONS SPÉCIALES
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Intelligence & Special Ops"
+    color: "#2ecc71"
+    priority: 1
+    feeds:
+      - name: "RAND Corporation"
+        url: "https://www.rand.org/pubs/rss"
+        confidence: 9
+        source_bias: think_tank
+        tags: [rand, research, policy]
+      - name: "War on the Rocks"
+        url: "https://warontherocks.com/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [strategy, analysis, us]
+      - name: "Bellingcat OSINT"
+        url: "https://www.bellingcat.com/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [osint, investigation, open-source]
+      - name: "Intel Today"
+        url: "https://inteltoday.org/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [intelligence, history, news]
+      - name: "The Cipher Brief"
+        url: "https://thecipherbrief.com/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [intel, analysis, us]
+      - name: "Lawfare — National Security"
+        url: "https://www.lawfaremedia.org/feed"
+        confidence: 8
+        source_bias: us_centric
+        canonical_in: "Strategic - Intelligence & Special Ops"
+        tags: [law, national-security, policy]
+      - name: "Just Security"
+        url: "https://www.justsecurity.org/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [law, security, us]
+      - name: "CSIS — Strategic Studies"
+        url: "https://www.csis.org/rss"
+        confidence: 8
+        source_bias: think_tank
+        tags: [csis, strategy, us]
+      - name: "Wilson Center"
+        url: "https://www.wilsoncenter.org/rss.xml"
+        confidence: 7
+        source_bias: think_tank
+        tags: [policy, global, research]
+      - name: "Intercept — National Sec."
+        url: "https://theintercept.com/feed/?rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [investigative, national-security, leak]
+      - name: "ProPublica National Sec."
+        url: "https://www.propublica.org/feeds/propublica/national-security"
+        confidence: 7
+        source_bias: us_centric
+        tags: [investigative, us, national-security]
+      - name: "SpyTalk — Spooks & Spies"
+        url: "https://spytalk.substack.com/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [intel, cia, nsa, investigative]
+      - name: "Intelligence Online"
+        url: "https://www.intelligenceonline.com/rss"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [intel, global, subscription]
+      - name: "SOF News"
+        url: "https://sofnews.org/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: us_centric
+        flash_note: "JSOC/SOCOM — opérations spéciales non conventionnelles"
+        tags: [sof, jsoc, socom, special-ops]
+      - name: "Special Operations Association"
+        url: "https://specialoperations.org/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [sof, special-ops, veterans]
+      - name: "OSINT.team Blog"
+        url: "https://osint.team/rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [osint, tools, methodology]
+
+  # ---------------------------------------------------------------------------
+  # 8. GÉOPOLITIQUE & RELATIONS INTERNATIONALES
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Geopolitics & IR"
+    color: "#e84393"
+    priority: 2
+    feeds:
+      - name: "Foreign Affairs"
+        url: "https://www.foreignaffairs.com/rss.xml"
+        confidence: 8
+        source_bias: us_centric
+        tags: [ir, analysis, us]
+      - name: "Foreign Policy"
+        url: "https://foreignpolicy.com/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [ir, news, analysis]
+      - name: "The Economist — World"
+        url: "https://www.economist.com/the-world-this-week/rss.xml"
+        confidence: 8
+        source_bias: neutral
+        tags: [global, economy, politics]
+      - name: "Le Grand Continent"
+        url: "https://legrandcontinent.eu/feed/"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [eu, geopolitics, fr]
+      - name: "IRIS — Géopolitique"
+        url: "https://www.iris-france.org/feed/"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, ir, analysis]
+      - name: "Institut Montaigne"
+        url: "https://www.institutmontaigne.org/rss"
+        confidence: 6
+        source_bias: fr_centric
+        tags: [fr, policy, thinktank]
+      - name: "Council on Foreign Relations"
+        url: "https://www.cfr.org/rss/all"
+        confidence: 9
+        source_bias: us_centric
+        tags: [cfr, us, global]
+      - name: "Carnegie Endowment"
+        url: "https://carnegieendowment.org/rss"
+        confidence: 8
+        source_bias: think_tank
+        tags: [carnegie, nuclear, global]
+      - name: "Chatham House"
+        url: "https://www.chathamhouse.org/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [uk, ir, analysis]
+      - name: "Brookings Institution"
+        url: "https://www.brookings.edu/feed/"
+        confidence: 8
+        source_bias: think_tank
+        tags: [us, policy, research]
+      - name: "Atlantic Council"
+        url: "https://www.atlanticcouncil.org/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [nato, us, europe]
+      - name: "Reuters — World"
+        url: "https://feeds.reuters.com/reuters/worldNews"
+        confidence: 8
+        source_bias: neutral
+        tags: [news, global, wire]
+      - name: "Le Monde — International"
+        url: "https://www.lemonde.fr/international/rss_full.xml"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, news, global]
+      - name: "Orient XXI"
+        url: "https://orientxxi.info/feed/"
+        confidence: 6
+        source_bias: fr_centric
+        tags: [mena, fr, analysis]
+      - name: "ISN ETH Zürich"
+        url: "https://www.files.ethz.ch/isn/rss/isn_rss.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [eth, security, global]
+      - name: "Stratfor Worldview"
+        url: "https://worldview.stratfor.com/rss"
+        confidence: 7
+        source_bias: us_centric
+        tags: [stratfor, geopolitics, forecast]
+      - name: "ECFR — European Policy"
+        url: "https://ecfr.eu/feed/"
+        confidence: 7
+        source_bias: eu_centric
+        canonical_in: "Strategic - Geopolitics & IR"
+        tags: [eu, foreign-policy, europe]
+      - name: "IFRI — Actualités"
+        url: "https://www.ifri.org/fr/rss"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, ir, thinktank]
+      - name: "Asia Society Policy Institute"
+        url: "https://asiasociety.org/policy-institute/rss"
+        confidence: 7
+        source_bias: neutral
+        tags: [asia, policy, indo-pacific]
+      - name: "Lowy Institute — The Interpreter"
+        url: "https://www.lowyinstitute.org/the-interpreter/rss"
+        confidence: 7
+        source_bias: neutral
+        canonical_in: "Strategic - Geopolitics & IR"
+        tags: [australia, indo-pacific, analysis]
+      - name: "Courrier International"
+        url: "https://www.courrierinternational.com/feed/all/rss.xml"
+        confidence: 6
+        source_bias: fr_centric
+        tags: [fr, press-review, global]
+
+  # ---------------------------------------------------------------------------
+  # 9. CONFLITS & TERRAIN
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Conflicts & Battlefield"
+    color: "#c0392b"
+    priority: 1
+    feeds:
+      - name: "ISW — Ukraine/Russia"
+        url: "https://www.understandingwar.org/feed"
+        priority: "critical"
+        confidence: 8
+        source_bias: us_centric
+        flash_note: "Situation quotidienne Ukraine — carte opérationnelle de référence"
+        canonical_in: "Strategic - Conflicts & Battlefield"
+        tags: [isw, ukraine, russia]
+      - name: "UA Warspotting / Oryx"
+        url: "https://www.oryxspioenkop.com/feeds/posts/default"
+        confidence: 7
+        source_bias: pro_ukraine
+        tags: [ukraine, equipment, losses]
+      - name: "Kyiv Independent"
+        url: "https://kyivindependent.com/feed/"
+        confidence: 7
+        source_bias: pro_ukraine
+        tags: [ukraine, news, war]
+      - name: "Middle East Eye"
+        url: "https://www.middleeasteye.net/rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [mena, conflict, news]
+      - name: "Al-Monitor"
+        url: "https://www.al-monitor.com/rss"
+        confidence: 7
+        source_bias: neutral
+        tags: [mena, analysis, politics]
+      - name: "South China Morning Post"
+        url: "https://www.scmp.com/rss/91/feed"
+        confidence: 6
+        source_bias: neutral
+        tags: [china, asia, news]
+      - name: "The Diplomat"
+        url: "https://thediplomat.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [asia, indo-pacific, analysis]
+      - name: "Radio Free Europe"
+        url: "https://www.rferl.org/api/z-pqejiuivur"
+        confidence: 6
+        source_bias: us_centric
+        tags: [rfe, eastern-europe, russia]
+      - name: "Long War Journal"
+        url: "https://www.longwarjournal.org/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [afpak, jihadism, counterterrorism]
+      - name: "Conflict Monitor ACLED"
+        url: "https://acleddata.com/feed/"
+        confidence: 8
+        source_bias: neutral
+        canonical_in: "Strategic - Conflicts & Battlefield"
+        tags: [acled, data, conflict]
+      - name: "SITE Intelligence Group"
+        url: "https://ent.siteintelgroup.com/index.php?option=com_k2&view=itemlist&layout=category&task=category&id=16&type=rss&format=feed&Itemid=1"
+        confidence: 7
+        source_bias: us_centric
+        tags: [jihadism, terrorism, monitoring]
+      - name: "Global Voices — Conflict"
+        url: "https://globalvoices.org/category/world/conflict-war/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [citizen-media, conflict, global]
+      - name: "Sudan War Monitor"
+        url: "https://sudanwarmonitor.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [sudan, africa, conflict]
+
+  # ---------------------------------------------------------------------------
+  # 10. DATA LEAKS & BREACHES — PREMIUM
+  # ---------------------------------------------------------------------------
+  - name: "Offensive - Data Leaks & Breaches"
+    color: "#ff0040"
+    priority: 0
+    feeds:
+      - name: "Security Affairs — Pierluigi Paganini"
+        url: "https://securityaffairs.com/feed"
+        priority: "critical"
+        confidence: 9
+        source_bias: neutral
+        max_items: 30
+        tags: [breach, apt, news]
+      - name: "Hackmageddon — Cyber Attacks"
+        url: "https://www.hackmageddon.com/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [breach, timeline, statistics]
+      - name: "The Hacker News — Breaches"
+        url: "https://feeds.feedburner.com/TheHackersNews"
+        priority: "critical"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [breach, news]
+      - name: "Infosecurity Magazine — Breaches"
+        url: "https://www.infosecurity-magazine.com/data-breaches/rss.xml"
+        priority: "high"
+        confidence: 7
+        source_bias: neutral
+        tags: [breach, industry]
+      - name: "BleepingComputer — Breach"
+        url: "https://www.bleepingcomputer.com/tag/breach/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [breach, news]
+      - name: "Cybernews — Leaks"
+        url: "https://cybernews.com/tag/data-breach/feed/"
+        priority: "high"
+        confidence: 7
+        source_bias: neutral
+        tags: [leak, breach, news]
+      - name: "HIBP — Latest Breaches"
+        url: "https://feeds.feedburner.com/HaveIBeenPwnedLatestBreaches"
+        priority: "critical"
+        confidence: 10
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [hibp, breach, credentials]
+      - name: "DataBreaches.net"
+        url: "https://www.databreaches.net/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [breach, healthcare, education]
+      - name: "Krebs on Security — Breaches"
+        url: "https://krebsonsecurity.com/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [breach, investigative]
+      - name: "Troy Hunt Blog"
+        url: "https://www.troyhunt.com/rss/"
+        confidence: 9
+        source_bias: neutral
+        tags: [hibp, breach, research]
+
+  # ---------------------------------------------------------------------------
+  # 11. MALWARE & RANSOMWARE
+  # ---------------------------------------------------------------------------
+  - name: "Offensive - Malware & Ransomware"
+    color: "#c0392b"
+    priority: 1
+    feeds:
+      - name: "Ransomware.live Feed"
+        url: "https://ransomware.live/feed.xml"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [ransomware, victim, leak]
+      - name: "vx-underground"
+        url: "https://vx-underground.org/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [malware, underground, sample]
+      - name: "ThreatFox"
+        url: "https://threatfox.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [ioc, c2, malware]
+      - name: "MalwareBazaar"
+        url: "https://bazaar.abuse.ch/browse/rss/"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [malware, sample]
+      - name: "ANY.RUN"
+        url: "https://any.run/cybersecurity-blog/category/malware-analysis/feed/"
+        confidence: 7
+        source_bias: industry
+        role: "cross_ref"
+        tags: [sandbox, analysis, malware]
+      - name: "Cisco Talos — Ransomware"
+        url: "https://blog.talosintelligence.com/feeds/posts/default"
+        confidence: 8
+        source_bias: industry
+        role: "cross_ref"
+        tags: [ransomware, talos, research]
+      - name: "CrowdStrike — Ransomware"
+        url: "https://www.crowdstrike.com/blog/feed/"
+        confidence: 8
+        source_bias: industry
+        role: "cross_ref"
+        tags: [ransomware, apt, research]
+      - name: "Mandiant — Ransomware"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 8
+        source_bias: industry
+        role: "cross_ref"
+        tags: [ransomware, ir, research]
+      - name: "Sophos — X-Ops"
+        url: "https://news.sophos.com/en-us/category/threat-research/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [ransomware, endpoint, research]
+      - name: "Coveware — Ransomware Reports"
+        url: "https://www.coveware.com/blog?format=rss"
+        confidence: 7
+        source_bias: industry
+        tags: [ransomware, negotiation, statistics]
+      - name: "Dragos — ICS Ransomware"
+        url: "https://www.dragos.com/blog/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [ics, ransomware, ot]
+
+  # ---------------------------------------------------------------------------
+  # 12. TRAFIC AÉRIEN & AVIATION CIVILE
+  # ---------------------------------------------------------------------------
+  - name: "Aviation - Air Traffic & Safety"
+    color: "#f5a623"
+    priority: 3
+    feeds:
+      - name: "The Aviation Herald"
+        url: "https://avherald.com/rss.xml"
+        confidence: 8
+        source_bias: neutral
+        flash_note: "Incidents et accidents — pertinent pour corridors aériens de crise"
+        tags: [incident, safety, atsb]
+      - name: "Simple Flying"
+        url: "https://simpleflying.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [aviation, news, commercial]
+      - name: "Airways Magazine"
+        url: "https://airwaysmag.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [aviation, airlines, routes]
+      - name: "ch-aviation"
+        url: "https://www.ch-aviation.com/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [aviation, fleets, data]
+      - name: "IATA – News"
+        url: "https://www.iata.org/en/pressroom/rss/"
+        confidence: 7
+        source_bias: industry
+        tags: [iata, policy, industry]
+      - name: "Eurocontrol – News"
+        url: "https://www.eurocontrol.int/rss.xml"
+        confidence: 7
+        source_bias: official
+        tags: [atm, eurocontrol, eu]
+      - name: "Le Journal de l'Aviation"
+        url: "https://www.journal-aviation.com/feed/"
+        confidence: 6
+        source_bias: fr_centric
+        tags: [fr, aviation, industry]
+      - name: "ATC Network"
+        url: "https://www.atcnetwork.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [atc, radar, safety]
+      - name: "FlightAware — Aviation News"
+        url: "https://flightaware.com/about/press/rss.xml"
+        confidence: 6
+        source_bias: neutral
+        tags: [adsb, tracking, data]
+      - name: "SKYbrary — Safety"
+        url: "https://skybrary.aero/feed"
+        confidence: 7
+        source_bias: official
+        tags: [safety, icao, standards]
+      - name: "ICAO — Newsroom"
+        url: "https://www.icao.int/Newsroom/pages/rss.aspx"
+        confidence: 8
+        source_bias: official
+        tags: [icao, un, official]
+      - name: "AIN Online"
+        url: "https://www.ainonline.com/rss.xml"
+        confidence: 6
+        source_bias: neutral
+        canonical_in: "Aviation - Air Traffic & Safety"
+        tags: [aviation, business, industry]
+
+  # ---------------------------------------------------------------------------
+  # 13. CYBER-DÉFENSE & GUERRE ÉLECTRONIQUE
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Cyber Defense & EW"
+    color: "#00d4aa"
+    priority: 2
+    feeds:
+      - name: "C4ISRNET — Cyber"
+        url: "https://www.c4isrnet.com/cyber/rss/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [c4isr, cyber, defense]
+      - name: "Fifth Domain"
+        url: "https://www.fifthdomain.com/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [cyber, us, defense]
+      - name: "CyberScoop — Gov/Defense"
+        url: "https://cyberscoop.com/feed/"
+        confidence: 7
+        source_bias: us_centric
+        role: "cross_ref"
+        tags: [gov, policy, cyber]
+      - name: "CISA — Alertes"
+        url: "https://www.cisa.gov/news.xml"
+        priority: "high"
+        confidence: 9
+        source_bias: official
+        flash_note: "Directives d'urgence CISA — applicables aux OIV alignés US"
+        tags: [cisa, us, official]
+      - name: "NSA — Cybersecurity"
+        url: "https://www.nsa.gov/news-features/press-room/rss/"
+        confidence: 8
+        source_bias: official
+        tags: [nsa, us, official]
+      - name: "ANSSI — Alertes"
+        url: "https://www.cert.ssi.gouv.fr/feed/"
+        confidence: 9
+        source_bias: official
+        role: "cross_ref"
+        tags: [anssi, fr, official]
+      - name: "ENISA — News"
+        url: "https://www.enisa.europa.eu/news/rss"
+        confidence: 8
+        source_bias: official
+        role: "cross_ref"
+        tags: [eu, enisa, official]
+      - name: "Recorded Future — Nation-State"
+        url: "https://www.recordedfuture.com/category/nation-state/feed"
+        confidence: 8
+        source_bias: industry
+        tags: [apt, nation-state, threat-intel]
+      - name: "Mandiant APT Research"
+        url: "https://www.mandiant.com/resources/blog/rss.xml"
+        confidence: 9
+        source_bias: industry
+        role: "cross_ref"
+        tags: [apt, ir, research]
+      - name: "SentinelOne — Nation-State"
+        url: "https://www.sentinelone.com/labs/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [apt, nation-state, research]
+      - name: "Lawfare — Cybersecurity"
+        url: "https://www.lawfaremedia.org/topics/cybersecurity/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [law, cyber, policy]
+      - name: "NATO CCDCOE"
+        url: "https://ccdcoe.org/feed/"
+        confidence: 8
+        source_bias: neutral
+        flash_note: "Doctrine cyber OTAN — référence juridique lex specialis"
+        tags: [nato, cyber, doctrine]
+      - name: "UK NCSC — Advisories"
+        url: "https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml"
+        confidence: 9
+        source_bias: official
+        tags: [uk, ncsc, official]
+      - name: "BSI Allemagne — Alertes"
+        url: "https://www.bsi.bund.de/SiteGlobals/Functions/RSSFeed/RSSNewsfeed/RSSNewsfeed.xml"
+        confidence: 8
+        source_bias: official
+        tags: [de, bsi, official]
+      - name: "CERT-EU"
+        url: "https://www.cert.europa.eu/publications/threat-intelligence/rss"
+        confidence: 8
+        source_bias: official
+        tags: [eu, cert, official]
+      - name: "EW Developments (C4ISRNET)"
+        url: "https://www.c4isrnet.com/electronic-warfare/rss/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [ew, electronic-warfare, jamming]
+      - name: "GPS Spoofing — OSINTdefender"
+        url: "https://osintdefender.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [gps, spoofing, ew, navigation]
+
+  # ---------------------------------------------------------------------------
+  # 14. CYBER-PHYSIQUE & SCADA/ICS
+  # ---------------------------------------------------------------------------
+  - name: "Cyber-Physical - SCADA & ICS"
+    color: "#ff9f00"
+    priority: 1
+    feeds:
+      - name: "Dragos — ICS/OT Blog"
+        url: "https://www.dragos.com/blog/feed/"
+        confidence: 9
+        source_bias: industry
+        flash_note: "Leader mondial sécurité OT — alertes ICS de haute valeur"
+        tags: [ics, ot, dragos]
+      - name: "Claroty — Research"
+        url: "https://claroty.com/blog/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [ics, ot, xiot]
+      - name: "Nozomi Networks Blog"
+        url: "https://www.nozominetworks.com/blog/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [ics, scada, ot]
+      - name: "Forescout Research"
+        url: "https://www.forescout.com/blog/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [iot, ics, ot]
+      - name: "CISA — ICS Advisories"
+        url: "https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml"
+        priority: "critical"
+        confidence: 10
+        source_bias: official
+        flash_note: "Advisories ICS/SCADA CISA — diffusion immédiate aux OIV"
+        tags: [ics, cisa, official, advisory]
+      - name: "ICS-CERT Alerts"
+        url: "https://www.cisa.gov/cybersecurity-advisories/all.xml"
+        confidence: 9
+        source_bias: official
+        tags: [ics, cert, advisory]
+      - name: "Idaho National Lab — Energy Security"
+        url: "https://inl.gov/feeds/news/"
+        confidence: 7
+        source_bias: official
+        tags: [energy, nuclear, ics]
+      - name: "Waterfall Security"
+        url: "https://waterfall-security.com/blog/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [ics, airgap, ot]
+      - name: "SecurityWeek — ICS/SCADA"
+        url: "https://www.securityweek.com/category/ics-scada/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [ics, scada, news]
+      - name: "S4 Events Blog"
+        url: "https://s4xevents.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [ics, conference, research]
+      - name: "ENISA — Industrial Security"
+        url: "https://www.enisa.europa.eu/topics/critical-information-infrastructures-and-services/rss"
+        confidence: 8
+        source_bias: official
+        tags: [eu, ics, official]
+      - name: "Vedere Labs (Forescout)"
+        url: "https://www.forescout.com/company/blog/category/research/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [iot, ics, research]
+      - name: "Applied Risk"
+        url: "https://applied-risk.com/blog/feed"
+        confidence: 7
+        source_bias: industry
+        tags: [ics, scada, research]
+
+  # ---------------------------------------------------------------------------
+  # 15. GUERRE DE L'INFORMATION & DÉSINFORMATION
+  # ---------------------------------------------------------------------------
+  - name: "InfoWar - Disinformation & Influence Ops"
+    color: "#9b59b6"
+    priority: 1
+    feeds:
+      - name: "EU DisinfoLab"
+        url: "https://www.disinfo.eu/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: eu_centric
+        tags: [disinfo, eu, investigation]
+      - name: "EUvsDisinfo (EEAS)"
+        url: "https://euvsdisinfo.eu/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: eu_centric
+        flash_note: "Base référence narratifs pro-Kremlin — 17 000+ cas documentés"
+        tags: [disinfo, eu, russia]
+      - name: "Alliance for Securing Democracy"
+        url: "https://securingdemocracy.gmfus.org/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [influence, russia, china]
+      - name: "Stanford Internet Observatory"
+        url: "https://fsi.stanford.edu/io/rss.xml"
+        confidence: 9
+        source_bias: neutral
+        tags: [influence, research, social-media]
+      - name: "DFRLab — Digital Forensic"
+        url: "https://dfrlab.org/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        tags: [disinfo, osint, investigation]
+      - name: "Graphika Research"
+        url: "https://graphika.com/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [influence, network-analysis, social-media]
+      - name: "NewsGuard — Misinformation"
+        url: "https://www.newsguardtech.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [disinfo, media, rating]
+      - name: "Bellingcat — InfoWar"
+        url: "https://www.bellingcat.com/category/resources/feed/"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [osint, disinfo, investigation]
+      - name: "Disinfo Matters — EURACTIV"
+        url: "https://www.euractiv.com/sections/disinformation/feed/"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [disinfo, eu, media]
+      - name: "Computational Propaganda Project (Oxford)"
+        url: "https://comprop.oii.ox.ac.uk/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [bots, influence, research]
+      - name: "Microsoft DTAC"
+        url: "https://blogs.microsoft.com/on-the-issues/category/cybersecurity/feed/"
+        confidence: 8
+        source_bias: industry
+        tags: [influence, nation-state, microsoft]
+      - name: "Meta Adversarial Threat Report"
+        url: "https://about.fb.com/news/category/security/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [influence, social-media, meta]
+      - name: "Mandiant — Influence Ops"
+        url: "https://www.mandiant.com/resources/blog/tag/influence-operations/rss.xml"
+        confidence: 9
+        source_bias: industry
+        role: "cross_ref"
+        tags: [influence, apt, investigation]
+      - name: "EU Fact Check — AFP"
+        url: "https://factuel.afp.com/feed"
+        confidence: 7
+        source_bias: neutral
+        tags: [factcheck, fr, afp]
+      - name: "CeMIS — Cognitive Warfare"
+        url: "https://www.nato.int/cps/en/natohq/news_rss.xml"
+        confidence: 7
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [cognitive-warfare, nato, influence]
+
+  # ---------------------------------------------------------------------------
+  # 16. OSINT & IMAGERIE SATELLITE
+  # ---------------------------------------------------------------------------
+  - name: "OSINT - Geospatial & Satellite Imagery"
+    color: "#1abc9c"
+    priority: 2
+    feeds:
+      - name: "Bellingcat — OSINT"
+        url: "https://www.bellingcat.com/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: neutral
+        canonical_in: "OSINT - Geospatial & Satellite Imagery"
+        tags: [osint, geoint, investigation]
+      - name: "Planet Labs — Blog"
+        url: "https://www.planet.com/pulse/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [satellite, commercial, imagery]
+      - name: "Maxar — Newsroom"
+        url: "https://blog.maxar.com/feed"
+        confidence: 8
+        source_bias: industry
+        flash_note: "Fournisseur officiel imagery DoD — capacité haute résolution"
+        tags: [satellite, maxar, geoint]
+      - name: "ICEYE — Blog"
+        url: "https://www.iceye.com/blog/rss"
+        confidence: 7
+        source_bias: industry
+        tags: [sar, satellite, radar]
+      - name: "Capella Space"
+        url: "https://www.capellaspace.com/blog/feed/"
+        confidence: 7
+        source_bias: industry
+        tags: [sar, satellite, radar]
+      - name: "Umbra SAR"
+        url: "https://umbra.space/blog-feed.xml"
+        confidence: 7
+        source_bias: industry
+        tags: [sar, satellite, commercial]
+      - name: "CNES — Actualités"
+        url: "https://cnes.fr/fr/rss.xml"
+        confidence: 7
+        source_bias: official
+        tags: [fr, cnes, satellite]
+      - name: "Copernicus Emergency Management"
+        url: "https://emergency.copernicus.eu/mapping/copernicus-feeds/news"
+        confidence: 8
+        source_bias: official
+        flash_note: "Activation Copernicus EMS — crises humanitaires et catastrophes"
+        tags: [copernicus, eu, crisis]
+      - name: "Sentinel Hub — Blog"
+        url: "https://www.sentinel-hub.com/blog/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [eo, sentinel, imagery]
+      - name: "Geoconfirmed"
+        url: "https://geoconfirmed.azurewebsites.net/api/rss"
+        confidence: 7
+        source_bias: pro_ukraine
+        tags: [geolocation, ukraine, conflict]
+      - name: "AIS Marine Traffic (incidents)"
+        url: "https://www.marinetraffic.com/blog/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [ais, maritime, tracking]
+      - name: "ADSBexchange — Analysis Blog"
+        url: "https://www.adsbexchange.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [adsb, aviation, tracking]
+      - name: "ShadowBreak Intl. — OSINT"
+        url: "https://shadowbreakintl.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [osint, geoint, analysis]
+      - name: "OSINT Framework (updates)"
+        url: "https://osintframework.com/rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [osint, tools, framework]
+
+  # ---------------------------------------------------------------------------
+  # 17. THÉÂTRE ARCTIQUE & ESPACE CONTESTÉ
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Arctic & Contested Space"
+    color: "#a8d8ea"
+    priority: 2
+    feeds:
+      - name: "Arctic Institute"
+        url: "https://www.thearcticinstitute.org/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [arctic, policy, research]
+      - name: "High North News"
+        url: "https://www.highnorthnews.com/en/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [arctic, norway, news]
+      - name: "The Barents Observer"
+        url: "https://thebarentsobserver.com/rss"
+        confidence: 7
+        source_bias: neutral
+        tags: [arctic, russia, norway]
+      - name: "Arctic Today"
+        url: "https://www.arctictoday.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [arctic, news, climate]
+      - name: "Norwegian Institute of International Affairs (NUPI)"
+        url: "https://www.nupi.no/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [arctic, norway, ir]
+      - name: "Wilson Center — Polar"
+        url: "https://www.wilsoncenter.org/program/polar-institute/rss"
+        confidence: 7
+        source_bias: think_tank
+        tags: [arctic, policy, us]
+      - name: "SIPRI — Arctic Security"
+        url: "https://www.sipri.org/tags/arctic/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [arctic, sipri, arms]
+      - name: "NATO — Northern Flank Updates"
+        url: "https://www.nato.int/cps/en/natohq/news_rss.xml"
+        confidence: 8
+        source_bias: official
+        tags: [nato, arctic, northern]
+      - name: "Eye on the Arctic (Radio Canada)"
+        url: "https://www.rcinet.ca/eye-on-the-arctic/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [arctic, canada, news]
+      - name: "Space Policy Institute (GWU)"
+        url: "https://spacepolicy.gwu.edu/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [space, policy, us]
+      - name: "Space Force — News"
+        url: "https://www.spaceforce.mil/News/RSS/"
+        confidence: 8
+        source_bias: official
+        tags: [us, spaceforce, official]
+
+  # ---------------------------------------------------------------------------
+  # 18. THÉÂTRE INDO-PACIFIQUE & TAÏWAN
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Indo-Pacific & Taiwan Strait"
+    color: "#3498db"
+    priority: 1
+    feeds:
+      - name: "CSIS — Asia"
+        url: "https://www.csis.org/region/asia/rss"
+        priority: "high"
+        confidence: 9
+        source_bias: think_tank
+        tags: [csis, asia, us]
+      - name: "IISS — Asia-Pacific"
+        url: "https://www.iiss.org/en/regions/asia-pacific/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [iiss, asia, military-balance]
+      - name: "The Diplomat — Security"
+        url: "https://thediplomat.com/category/security/feed/"
+        priority: "high"
+        confidence: 8
+        source_bias: neutral
+        tags: [asia, security, analysis]
+      - name: "38 North — Indo-Pacific"
+        url: "https://www.38north.org/category/nuclear/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [dprk, missile, nuclear]
+      - name: "War on the Rocks — Asia"
+        url: "https://warontherocks.com/category/asia/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [asia, strategy, us]
+      - name: "RAND — Pacific"
+        url: "https://www.rand.org/regions/asia-pacific/rss"
+        confidence: 8
+        source_bias: think_tank
+        tags: [rand, asia, policy]
+      - name: "Taiwan News"
+        url: "https://www.taiwannews.com.tw/en/rss/news"
+        confidence: 6
+        source_bias: pro_taiwan
+        tags: [taiwan, news, strait]
+      - name: "Focus Taiwan (CNA)"
+        url: "https://focustaiwan.tw/rss.xml"
+        confidence: 7
+        source_bias: official
+        tags: [taiwan, official, strait]
+      - name: "Asia Maritime Transparency Initiative (CSIS)"
+        url: "https://amti.csis.org/feed/"
+        priority: "high"
+        confidence: 9
+        source_bias: think_tank
+        flash_note: "Activité PLA Navy — incidents mer de Chine méridionale"
+        tags: [scs, maritime, china]
+      - name: "Global Taiwan Institute"
+        url: "https://globaltaiwan.org/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [taiwan, policy, us]
+      - name: "Pacific Forum CSIS"
+        url: "https://pacforum.org/feed/"
+        confidence: 7
+        source_bias: think_tank
+        tags: [pacific, security, csis]
+      - name: "Japan Times — Defense"
+        url: "https://www.japantimes.co.jp/news/defense-military/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [japan, defense, asia]
+      - name: "Korea JoongAng Daily — Security"
+        url: "https://koreajoongangdaily.joins.com/rss/security"
+        confidence: 6
+        source_bias: neutral
+        tags: [korea, security, north-korea]
+      - name: "East-West Center"
+        url: "https://www.eastwestcenter.org/rss.xml"
+        confidence: 7
+        source_bias: neutral
+        tags: [pacific, policy, us]
+      - name: "Lowy Institute — Indo-Pacific"
+        url: "https://www.lowyinstitute.org/the-interpreter/rss"
+        confidence: 7
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [australia, indo-pacific, analysis]
+
+  # ---------------------------------------------------------------------------
+  # 19. THÉÂTRE AFRIQUE SUBSAHARIENNE & SAHEL
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Sub-Saharan Africa & Sahel"
+    color: "#d4a017"
+    priority: 2
+    feeds:
+      - name: "Africa Defense Forum"
+        url: "https://adf-magazine.com/feed/"
+        priority: "high"
+        confidence: 7
+        source_bias: us_centric
+        canonical_in: "Strategic - Sub-Saharan Africa & Sahel"
+        tags: [africa, defense, us-africa]
+      - name: "ISS Africa — Security"
+        url: "https://issafrica.org/iss-today/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [africa, security, analysis]
+      - name: "African Arguments"
+        url: "https://africanarguments.org/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [africa, analysis, politics]
+      - name: "The Africa Report"
+        url: "https://www.theafricareport.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [africa, news, geopolitics]
+      - name: "ACLED — Africa"
+        url: "https://acleddata.com/category/analysis/africa/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [acled, africa, conflict-data]
+      - name: "Global Observatory (IPI)"
+        url: "https://theglobalobservatory.org/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [un, peacekeeping, africa]
+      - name: "RFI — Afrique"
+        url: "https://www.rfi.fr/fr/rss/afrique"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [fr, africa, news]
+      - name: "Jeune Afrique"
+        url: "https://www.jeuneafrique.com/feed/"
+        confidence: 7
+        source_bias: fr_centric
+        tags: [africa, fr, geopolitics]
+      - name: "MENASTREAM"
+        url: "https://menastream.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [mena, sahel, jihadism]
+      - name: "Terrorism Monitor (Jamestown)"
+        url: "https://jamestown.org/programs/tm/feed/"
+        confidence: 7
+        source_bias: us_centric
+        tags: [terrorism, sahel, africa]
+      - name: "Long War Journal — Africa"
+        url: "https://www.longwarjournal.org/archives/africa/feed"
+        confidence: 7
+        source_bias: us_centric
+        tags: [jihadism, africa, ct]
+      - name: "Sudan War Monitor"
+        url: "https://sudanwarmonitor.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [sudan, conflict, africa]
+      - name: "ENACT Africa"
+        url: "https://enactafrica.org/feed/"
+        confidence: 7
+        source_bias: neutral
+        tags: [crime, governance, africa]
+      - name: "Africa Center for Strategic Studies"
+        url: "https://africacenter.org/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [us, africa, security]
+      - name: "Sahel Research Group"
+        url: "https://sahelresearchgroup.wordpress.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [sahel, jihadism, research]
+
+  # ---------------------------------------------------------------------------
+  # 20. NOUVEAU v5.0 — MARITIME : SHIPPING, NAVAL OPS & DÉTROITS
+  # ---------------------------------------------------------------------------
+  - name: "Maritime - Shipping & Naval Ops"
+    color: "#0077b6"
+    priority: 1
+    feeds:
+      - name: "UKMTO — Maritime Security Alerts"
+        url: "https://www.ukmto.org/rss"
+        priority: "critical"
+        confidence: 9
+        source_bias: official
+        flash_note: "Organisation maritime RU — alertes incidents mer Rouge / Golfe / OI"
+        tags: [maritime, ukmto, security, alert]
+      - name: "MSCHOA — EU Naval Force"
+        url: "https://www.mschoa.org/news.rss"
+        priority: "critical"
+        confidence: 9
+        source_bias: official
+        flash_note: "EU NAVFOR — opération Atalante / Aspides — zone HRA"
+        tags: [maritime, eunavfor, atalante, aspides]
+      - name: "BIMCO — Maritime Security"
+        url: "https://www.bimco.org/rss/news"
+        priority: "high"
+        confidence: 8
+        source_bias: industry
+        flash_note: "BIMCO — syndicat armateurs, alertes zones de guerre maritimes"
+        tags: [maritime, bimco, shipping, zone-guerre]
+      - name: "Lloyd's List Intelligence"
+        url: "https://lloydslist.maritimeintelligence.informa.com/rss"
+        confidence: 8
+        source_bias: industry
+        tags: [maritime, shipping, intelligence]
+      - name: "NavalToday"
+        url: "https://navaltoday.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [naval, fleet, news]
+      - name: "Naval News"
+        url: "https://www.navalnews.com/feed/"
+        confidence: 7
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [naval, fleet, analysis]
+      - name: "USNI News — Naval"
+        url: "https://news.usni.org/feed"
+        confidence: 8
+        source_bias: us_centric
+        role: "cross_ref"
+        tags: [us, naval, fleet]
+      - name: "Hellenic Shipping News"
+        url: "https://www.hellenicshippingnews.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [shipping, greece, news]
+      - name: "TradeWinds — Security"
+        url: "https://www.tradewindsnews.com/rss"
+        confidence: 7
+        source_bias: industry
+        tags: [shipping, trade, maritime]
+      - name: "Splash247"
+        url: "https://splash247.com/feed/"
+        confidence: 6
+        source_bias: neutral
+        tags: [shipping, commercial, maritime]
+      - name: "MarineLink — Maritime Security"
+        url: "https://www.marinelink.com/rss"
+        confidence: 6
+        source_bias: neutral
+        tags: [maritime, security, news]
+      - name: "Vessel Finder — Blog"
+        url: "https://www.vesselfinder.com/news/feed"
+        confidence: 6
+        source_bias: neutral
+        tags: [ais, vessels, tracking]
+      - name: "GCaptain — Maritime"
+        url: "https://gcaptain.com/feed/"
+        priority: "high"
+        confidence: 7
+        source_bias: neutral
+        flash_note: "Incidents en mer, grounding, abordages, prises d'otages"
+        tags: [maritime, incident, shipping]
+      - name: "Oceans Beyond Piracy"
+        url: "https://oceansbeyondpiracy.org/feed/"
+        confidence: 7
+        source_bias: ngo
+        tags: [piracy, maritime, security]
+      - name: "IMO — News"
+        url: "https://www.imo.org/en/MediaCentre/Pages/rss.aspx"
+        confidence: 8
+        source_bias: official
+        flash_note: "Organisation Maritime Internationale — réglementation et incidents"
+        tags: [imo, official, maritime, regulation]
+      - name: "Submarine Cable Map (news)"
+        url: "https://www.submarinecablemap.com/blog/rss"
+        confidence: 7
+        source_bias: neutral
+        flash_note: "Incidents câbles sous-marins — infra critique communications mondiales"
+        tags: [cable, submarine, infrastructure, hybrid]
+      - name: "France Marine Nationale"
+        url: "https://www.defense.gouv.fr/marine/feed"
+        confidence: 8
+        source_bias: official
+        tags: [fr, marine-nationale, official]
+      - name: "NATO Shipping Centre"
+        url: "https://www.mc.nato.int/nsc/rss"
+        confidence: 8
+        source_bias: official
+        tags: [nato, maritime, shipping]
+
+  # ---------------------------------------------------------------------------
+  # 21. NOUVEAU v5.0 — GUERRE HYBRIDE (sabotages, GPS, câbles, proxies)
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Hybrid Warfare"
+    color: "#6c3483"
+    priority: 1
+    feeds:
+      - name: "NATO Hybrid CoE Helsinki"
+        url: "https://www.hybridcoe.fi/feed/"
+        priority: "critical"
+        confidence: 9
+        source_bias: neutral
+        flash_note: "Centre OTAN excellence guerre hybride — référence doctrinale"
+        tags: [hybrid, nato, doctrine]
+      - name: "IISS — Hybrid Conflict"
+        url: "https://www.iiss.org/topics/hybrid-warfare/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [hybrid, iiss, analysis]
+      - name: "Chatham House — Grey Zone"
+        url: "https://www.chathamhouse.org/topics/grey-zone/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [hybrid, grey-zone, uk]
+      - name: "War on the Rocks — Hybrid"
+        url: "https://warontherocks.com/category/irregular-warfare/feed/"
+        confidence: 8
+        source_bias: us_centric
+        tags: [hybrid, irregular, doctrine]
+      - name: "C4ISRNET — EW & Hybrid"
+        url: "https://www.c4isrnet.com/electronic-warfare/rss/"
+        confidence: 7
+        source_bias: us_centric
+        role: "cross_ref"
+        tags: [ew, hybrid, electronic]
+      - name: "Irregular Warfare Initiative"
+        url: "https://irregularwarfare.org/feed/"
+        confidence: 8
+        source_bias: us_centric
+        flash_note: "Focus UW/UXO/proxies — doctrine IWI West Point"
+        tags: [uw, proxy, irregular, hybrid]
+      - name: "RUSI — Hybrid & Grey Zone"
+        url: "https://www.rusi.org/topics/hybrid-warfare/rss"
+        confidence: 8
+        source_bias: neutral
+        tags: [hybrid, rusi, uk]
+      - name: "GPS Jamming Monitor (GPSJam)"
+        url: "https://gpsjam.org/rss"
+        confidence: 7
+        source_bias: neutral
+        flash_note: "Carte temps réel brouillage/spoofing GPS — corridors aériens"
+        tags: [gps, jamming, spoofing, ew, hybrid]
+      - name: "Submarine Cable Map (incidents)"
+        url: "https://www.submarinecablemap.com/blog/rss"
+        confidence: 7
+        source_bias: neutral
+        canonical_in: "Strategic - Hybrid Warfare"
+        flash_note: "Coupures câbles sous-marins — sabotage ou accident"
+        tags: [cable, infrastructure, hybrid, sabotage]
+      - name: "ACLED — Sabotage & Infrastructure"
+        url: "https://acleddata.com/category/analysis/infrastructure/feed/"
+        confidence: 8
+        source_bias: neutral
+        tags: [sabotage, infrastructure, acled]
+      - name: "Recorded Future — Nation-State Ops"
+        url: "https://www.recordedfuture.com/category/nation-state/feed"
+        confidence: 8
+        source_bias: industry
+        role: "cross_ref"
+        tags: [nation-state, hybrid, cyber]
+      - name: "DFRLab — Influence & Hybrid"
+        url: "https://dfrlab.org/feed/"
+        confidence: 9
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [hybrid, influence, disinfo]
+      - name: "GLOBSEC — Central Europe Security"
+        url: "https://www.globsec.org/feed/"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [hybrid, cee, security]
+      - name: "Bellingcat — Hybrid"
+        url: "https://www.bellingcat.com/category/resources/open-source-investigation/feed/"
+        confidence: 8
+        source_bias: neutral
+        role: "cross_ref"
+        tags: [osint, hybrid, investigation]
+
+  # ---------------------------------------------------------------------------
+  # 22. NOUVEAU v5.0 — ÉNERGIE & INFRASTRUCTURES CRITIQUES
+  # ---------------------------------------------------------------------------
+  - name: "Strategic - Energy & Critical Infrastructure"
+    color: "#e67e22"
+    priority: 1
+    feeds:
+      - name: "IEA — Emergency Alerts"
+        url: "https://www.iea.org/rss/news.xml"
+        priority: "critical"
+        confidence: 9
+        source_bias: official
+        flash_note: "Agence Internationale Énergie — perturbations offre mondiale"
+        tags: [energy, iea, official]
+      - name: "ENTSO-E — Grid Alerts"
+        url: "https://www.entsoe.eu/news/rss/"
+        priority: "critical"
+        confidence: 9
+        source_bias: official
+        flash_note: "Réseau électrique européen — incidents réseau et délestages"
+        tags: [energy, grid, europe, electricity]
+      - name: "ENISA — Critical Infrastructure"
+        url: "https://www.enisa.europa.eu/topics/critical-information-infrastructures-and-services/rss"
+        confidence: 8
+        source_bias: official
+        role: "cross_ref"
+        tags: [eu, ics, critical-infra]
+      - name: "Idaho National Lab"
+        url: "https://inl.gov/feeds/news/"
+        confidence: 7
+        source_bias: official
+        role: "cross_ref"
+        tags: [energy, nuclear, ics]
+      - name: "E&E News — Security"
+        url: "https://www.eenews.net/rss/news"
+        confidence: 7
+        source_bias: us_centric
+        tags: [energy, us, security]
+      - name: "S&P Global — Energy Security"
+        url: "https://www.spglobal.com/commodity-insights/en/rss"
+        confidence: 7
+        source_bias: industry
+        tags: [energy, commodities, pipeline]
+      - name: "Dragos — Energy Sector"
+        url: "https://www.dragos.com/sectors/electric/feed/"
+        confidence: 8
+        source_bias: industry
+        flash_note: "Dragos Energy — menaces OT secteur électrique et pétrole/gaz"
+        tags: [energy, ics, dragos]
+      - name: "Politico — Energy & Security"
+        url: "https://www.politico.eu/section/energy/feed/"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [eu, energy, policy]
+      - name: "Global Energy Monitor"
+        url: "https://globalenergymonitor.org/feed/"
+        confidence: 7
+        source_bias: ngo
+        tags: [energy, pipeline, infrastructure]
+      - name: "Offshore Energy — Security"
+        url: "https://www.offshore-energy.biz/feed/"
+        confidence: 6
+        source_bias: industry
+        tags: [offshore, pipeline, energy]
+      - name: "EPRS — EU Energy Security"
+        url: "https://www.europarl.europa.eu/rss/en/recent-publications.xml"
+        confidence: 7
+        source_bias: eu_centric
+        tags: [eu, energy, parliament]
+      - name: "NRC — Nuclear Events"
+        url: "https://www.nrc.gov/public-involve/rss-feeds/event-reports.xml"
+        priority: "high"
+        confidence: 8
+        source_bias: official
+        flash_note: "Event Reports NRC — événements centrales nucléaires US"
+        tags: [nuclear, energy, event-report, nrc]
+      - name: "French Ministry — Energy & Transition"
+        url: "https://www.ecologie.gouv.fr/rss"
+        confidence: 7
+        source_bias: official
+        tags: [fr, energy, official]
+      - name: "Water ISAC"
+        url: "https://www.waterisac.org/news/rss"
+        confidence: 7
+        source_bias: us_centric
+        flash_note: "Secteur eau US — cyber menaces et incidents"
+        tags: [water, ics, critical-infra, isac]
+      - name: "CIPAC — Critical Infrastructure"
+        url: "https://www.cisa.gov/topics/critical-infrastructure-security/rss"
+        confidence: 8
+        source_bias: official
+        tags: [cisa, critical-infra, us]
+
+# =============================================================================
+# FIN DE LA CONFIGURATION FULCRUM v5.0
+# =============================================================================
+# Statistiques :
+#   Catégories  : 22 (19 héritées + 3 nouvelles : Maritime, Hybrid, Energy/CI)
+#   Profils     : 6 (5 v4.0 + crisis_cell + oi_watch)
+#   Feeds total : ~350 entrées (dont ~70 cross_ref balisés)
+#   Feeds uniques : ~280
+#   Nouveaux domaines : Maritime · Guerre hybride · Énergie & Infra critiques
+#   Champs nouveaux : source_bias · flash_note (feeds critiques)
+#   Fix v4.0 : ECFR doublon · AIN Online canonical_in · feeds conf≤5 nettoyés
+#
+# PRIORITÉS OPÉRATIONNELLES RECOMMANDÉES :
+#   Mode garde active          → profil crisis_cell
+#   Mode veille OIV/OES        → profil oi_watch
+#   Briefing géostratégique    → profil strat_watch
+#   Investigation cyber        → profil cyber_ops
+#   Analyse InfoWar            → profil infowar
+#   Fusion complète (SITCEN)   → profil full_spectrum
+# =============================================================================

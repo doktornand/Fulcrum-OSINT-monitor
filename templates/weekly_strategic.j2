@@ -1,0 +1,22 @@
+{# templates/weekly_strategic.j2 — Synthèse stratégique hebdomadaire FULCRUM #}
+================================================================================
+  FULCRUM WEEKLY STRATEGIC ASSESSMENT
+  {{ generated_at | truncate(16, True, '') }} UTC  |  Période : {{ period }}
+================================================================================
+
+HEADLINE :
+  {{ headline }}
+
+{% for section in sections %}
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  {{ section.title | upper }}
+└──────────────────────────────────────────────────────────────────────────────┘
+{% for item in section.items %}
+  ▸ {{ item }}
+{% endfor %}
+
+{% endfor %}
+================================================================================
+  Généré par FULCRUM Intelligence Platform
+  Document à diffusion restreinte — Usage analytique uniquement
+================================================================================
